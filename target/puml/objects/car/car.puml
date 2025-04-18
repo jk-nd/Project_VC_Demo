@@ -1,0 +1,21 @@
+@startuml
+hide empty members
+namespace npl.objects.car {
+    enum Color << (e,lightgrey) >> {
+        {field} Red
+        {field} Blue
+        {field} Yellow
+        {field} Green
+        {field} Black
+    }
+    class Car << (p,orchid) >> {
+        {field} +owner: Party
+        {field} +model: Text
+        {field} +color: Color
+        {field} +observers: Map<Text, Party>
+        {method} +[owner] changeColor(newColor: Color)
+        {method} +[owner & *newOwner] transfer()
+    }
+    npl.objects.car.Car --> "1" npl.objects.car.Color : color
+}
+@enduml

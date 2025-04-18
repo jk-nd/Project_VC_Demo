@@ -1,0 +1,362 @@
+openapi: 3.0.1
+info:
+  title: processes
+  version: "1.0"
+servers:
+- url: https://engine.example.com/
+security:
+- jwt: []
+paths:
+  /npl/processes/-/openapi.json:
+    get:
+      operationId: _getOpenAPI
+      responses:
+        "200":
+          description: The OpenAPI spec
+          content:
+            application/json:
+              schema:
+                type: object
+      security: []
+  /npl/processes/Settle/:
+    get:
+      operationId: _getSettleList
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      responses:
+        "200":
+          description: All accessible protocol instances of this type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settle_List'
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "500":
+          $ref: '#/components/responses/500'
+    post:
+      operationId: _createSettle
+      parameters:
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Settle_Create'
+        required: true
+      responses:
+        "200":
+          description: The new protocol instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settle'
+        "204":
+          description: No Content
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "500":
+          $ref: '#/components/responses/500'
+  /npl/processes/Settle/{id}/:
+    get:
+      operationId: _getSettleByID
+      parameters:
+      - $ref: '#/components/parameters/ProtocolID'
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      responses:
+        "200":
+          description: The protocol instance with this ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settle'
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "404":
+          $ref: '#/components/responses/404'
+        "500":
+          $ref: '#/components/responses/500'
+  /npl/processes/Settle/{id}/swap:
+    post:
+      operationId: Settle_swap
+      parameters:
+      - $ref: '#/components/parameters/ProtocolID'
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                description: Unit
+                nullable: false
+        "204":
+          description: No Content
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "403":
+          $ref: '#/components/responses/403'
+        "404":
+          $ref: '#/components/responses/404'
+        "500":
+          $ref: '#/components/responses/500'
+components:
+  schemas:
+    _Party:
+      required:
+      - access
+      - entity
+      type: object
+      properties:
+        entity:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        access:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+      example:
+        entity:
+          iss:
+          - https://example.com
+          organization:
+          - Example
+        access:
+          preferred_email:
+          - john.doe@example.com
+    _Period:
+      required:
+      - days
+      - months
+      - weeks
+      - years
+      type: object
+      properties:
+        days:
+          type: integer
+        weeks:
+          type: integer
+        months:
+          type: integer
+        years:
+          type: integer
+    _Error:
+      type: object
+      properties:
+        errorType:
+          type: string
+        id:
+          type: string
+          format: uuid
+        idType:
+          type: string
+        message:
+          type: string
+        error:
+          type: string
+          nullable: true
+        origin:
+          type: object
+          properties:
+            value:
+              type: string
+            code:
+              type: integer
+              format: int32
+            originType:
+              type: string
+            id:
+              type: string
+            message:
+              type: string
+          nullable: true
+        stackTrace:
+          type: string
+          nullable: true
+        clientStackTrace:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              protocolId:
+                type: string
+                format: uuid
+                nullable: true
+              elementType:
+                type: string
+              location:
+                type: object
+                properties:
+                  file:
+                    type: string
+                  line:
+                    type: integer
+                    format: int32
+                  sourceRef:
+                    type: object
+                    properties:
+                      path:
+                        type: string
+                      commit:
+                        type: string
+                    nullable: true
+            nullable: true
+    Car_Reference:
+      type: string
+      format: uuid
+    Iou_Reference:
+      type: string
+      format: uuid
+    Settle:
+      required:
+      - '@actions'
+      - '@id'
+      - '@parties'
+      - car
+      - iou
+      type: object
+      properties:
+        '@id':
+          type: string
+          format: uuid
+        '@parties':
+          $ref: '#/components/schemas/Settle_Parties'
+        '@actions':
+          $ref: '#/components/schemas/Settle_Actions'
+        iou:
+          $ref: '#/components/schemas/Iou_Reference'
+        car:
+          $ref: '#/components/schemas/Car_Reference'
+      readOnly: true
+    Settle_Parties:
+      required:
+      - carOwner
+      - iouOwner
+      type: object
+      properties:
+        iouOwner:
+          $ref: '#/components/schemas/_Party'
+        carOwner:
+          $ref: '#/components/schemas/_Party'
+    Settle_Actions:
+      type: object
+      properties:
+        swap:
+          type: string
+          format: uri
+          example: https://engine.example.com/npl/processes/Settle/1ee39a43-8e4e-4b3b-8f1f-1e11ad495436/swap
+    Settle_List:
+      required:
+      - items
+      type: object
+      properties:
+        '@prev':
+          type: string
+          format: uri
+          example: https://engine.example.com/npl/processes/Settle/?page=1
+        '@next':
+          type: string
+          format: uri
+          example: https://engine.example.com/npl/processes/Settle/?page=3
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Settle'
+    Settle_Create:
+      required:
+      - '@parties'
+      - car
+      - iou
+      type: object
+      properties:
+        iou:
+          $ref: '#/components/schemas/Iou_Reference'
+        car:
+          $ref: '#/components/schemas/Car_Reference'
+        '@parties':
+          $ref: '#/components/schemas/Settle_Parties'
+  responses:
+    "400":
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "401":
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "403":
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "404":
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "500":
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+  parameters:
+    API_Version:
+      name: X-NPL-API
+      in: header
+      description: Optional parameter to require a specific API version
+      required: false
+      schema:
+        type: string
+    NPL_Tag:
+      name: X-NPL-TAG
+      in: header
+      description: Optional parameter to require a specific NPL Tag
+      required: false
+      schema:
+        type: string
+    ProtocolID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  securitySchemes:
+    jwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

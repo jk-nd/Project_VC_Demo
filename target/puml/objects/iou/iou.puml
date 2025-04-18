@@ -1,0 +1,20 @@
+@startuml
+hide empty members
+namespace npl.objects.iou {
+    class TimestampedAmount << (s,green) >> {
+        {field} +amount: Number
+        {field} +timestamp: DateTime
+    }
+    class Iou << (p,orchid) >> {
+        {field} +issuer: Party
+        {field} +payee: Party
+        {field} +payments: List<TimestampedAmount>
+        {field} +forAmount: Number
+        {field} +observers: Map<Text, Party>
+        {method} +[issuer] pay(amount: Number)
+        {method} +[payee] forgive()
+        {method} +[issuer | payee] getAmountOwed(): Number
+    }
+    npl.objects.iou.Iou --> "*" npl.objects.iou.TimestampedAmount : payments
+}
+@enduml

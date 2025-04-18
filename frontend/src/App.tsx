@@ -1,59 +1,42 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { ThemeProvider, createTheme, CircularProgress, Box } from '@mui/material';
-import { ReactKeycloakProvider } from '@react-keycloak/web';
-import Layout from './components/Layout';
-import IOUList from './components/iou/IOUList';
-import IOUCreate from './components/iou/IOUCreate';
-import keycloak, { initOptions } from './auth/keycloak';
-
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-  },
-});
-
-// Loading component
-const LoadingComponent = () => (
-  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-    <CircularProgress />
-  </Box>
-);
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import Login from './components/auth/Login';
+import MainLayout from './components/layout/MainLayout';
+import { useEffect, useState } from 'react';
+import { initKeycloak } from './auth/keycloak';
 
 function App() {
-  const eventLogger = (event: unknown, error: unknown) => {
-    console.log('onKeycloakEvent', event, error);
-  };
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  const tokenLogger = (tokens: unknown) => {
-    console.log('onKeycloakTokens', tokens);
-  };
+  useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        await initKeycloak();
+        setIsInitialized(true);
+      } catch (error) {
+        console.error('Failed to initialize auth:', error);
+        setIsInitialized(true);
+      }
+    };
+
+    initializeAuth();
+  }, []);
+
+  if (!isInitialized) {
+    return <div>Initializing authentication...</div>;
+  }
 
   return (
-    <ReactKeycloakProvider
-      authClient={keycloak}
-      initOptions={initOptions}
-      LoadingComponent={<LoadingComponent />}
-      onEvent={eventLogger}
-      onTokens={tokenLogger}
-    >
-      <ThemeProvider theme={theme}>
-        <Router>
-          <Layout>
-            <Routes>
-              <Route path="/ious" element={<IOUList />} />
-              <Route path="/ious/create" element={<IOUCreate />} />
-              <Route path="/" element={<IOUList />} />
-            </Routes>
-          </Layout>
-        </Router>
-      </ThemeProvider>
-    </ReactKeycloakProvider>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<MainLayout />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 
-export default App;
+export default App; 

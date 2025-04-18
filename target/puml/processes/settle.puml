@@ -1,0 +1,15 @@
+@startuml
+hide empty members
+namespace npl.processes {
+    class Settle << (p,orchid) >> {
+        {field} +iouOwner: Party
+        {field} +carOwner: Party
+        {field} +iou: Iou
+        {field} +car: Car
+        {field} +observers: Map<Text, Party>
+        {method} +[iouOwner & carOwner] swap()
+    }
+    npl.processes.Settle --> "1" npl.objects.iou.Iou : iou
+    npl.processes.Settle --> "1" npl.objects.car.Car : car
+}
+@enduml

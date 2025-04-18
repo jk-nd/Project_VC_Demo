@@ -1,0 +1,6 @@
+@startuml
+hide empty members
+!include objects/car/car.puml
+!include objects/iou/iou.puml
+!include processes/settle.puml
+@enduml

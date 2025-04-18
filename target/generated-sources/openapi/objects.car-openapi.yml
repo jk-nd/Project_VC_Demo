@@ -1,0 +1,374 @@
+openapi: 3.0.1
+info:
+  title: objects.car
+  version: "1.0"
+servers:
+- url: https://engine.example.com/
+security:
+- jwt: []
+paths:
+  /npl/objects/car/-/openapi.json:
+    get:
+      operationId: _getOpenAPI
+      responses:
+        "200":
+          description: The OpenAPI spec
+          content:
+            application/json:
+              schema:
+                type: object
+      security: []
+  /npl/objects/car/Car/:
+    get:
+      operationId: _getCarList
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      responses:
+        "200":
+          description: All accessible protocol instances of this type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Car_List'
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "500":
+          $ref: '#/components/responses/500'
+    post:
+      operationId: _createCar
+      parameters:
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Car_Create'
+        required: true
+      responses:
+        "200":
+          description: The new protocol instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Car'
+        "204":
+          description: No Content
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "500":
+          $ref: '#/components/responses/500'
+  /npl/objects/car/Car/{id}/:
+    get:
+      operationId: _getCarByID
+      parameters:
+      - $ref: '#/components/parameters/ProtocolID'
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      responses:
+        "200":
+          description: The protocol instance with this ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Car'
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "404":
+          $ref: '#/components/responses/404'
+        "500":
+          $ref: '#/components/responses/500'
+  /npl/objects/car/Car/{id}/changeColor:
+    post:
+      operationId: Car_changeColor
+      parameters:
+      - $ref: '#/components/parameters/ProtocolID'
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Car_ChangeColor_Command'
+        required: true
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                description: Unit
+                nullable: false
+        "204":
+          description: No Content
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "403":
+          $ref: '#/components/responses/403'
+        "404":
+          $ref: '#/components/responses/404'
+        "500":
+          $ref: '#/components/responses/500'
+components:
+  schemas:
+    _Party:
+      required:
+      - access
+      - entity
+      type: object
+      properties:
+        entity:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        access:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+      example:
+        entity:
+          iss:
+          - https://example.com
+          organization:
+          - Example
+        access:
+          preferred_email:
+          - john.doe@example.com
+    _Period:
+      required:
+      - days
+      - months
+      - weeks
+      - years
+      type: object
+      properties:
+        days:
+          type: integer
+        weeks:
+          type: integer
+        months:
+          type: integer
+        years:
+          type: integer
+    _Error:
+      type: object
+      properties:
+        errorType:
+          type: string
+        id:
+          type: string
+          format: uuid
+        idType:
+          type: string
+        message:
+          type: string
+        error:
+          type: string
+          nullable: true
+        origin:
+          type: object
+          properties:
+            value:
+              type: string
+            code:
+              type: integer
+              format: int32
+            originType:
+              type: string
+            id:
+              type: string
+            message:
+              type: string
+          nullable: true
+        stackTrace:
+          type: string
+          nullable: true
+        clientStackTrace:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              protocolId:
+                type: string
+                format: uuid
+                nullable: true
+              elementType:
+                type: string
+              location:
+                type: object
+                properties:
+                  file:
+                    type: string
+                  line:
+                    type: integer
+                    format: int32
+                  sourceRef:
+                    type: object
+                    properties:
+                      path:
+                        type: string
+                      commit:
+                        type: string
+                    nullable: true
+            nullable: true
+    Color:
+      type: string
+      enum:
+      - Red
+      - Blue
+      - Yellow
+      - Green
+      - Black
+    Car:
+      required:
+      - '@actions'
+      - '@id'
+      - '@parties'
+      - color
+      - model
+      type: object
+      properties:
+        '@id':
+          type: string
+          format: uuid
+        '@parties':
+          $ref: '#/components/schemas/Car_Parties'
+        '@actions':
+          $ref: '#/components/schemas/Car_Actions'
+        model:
+          type: string
+        color:
+          $ref: '#/components/schemas/Color'
+      readOnly: true
+    Car_Parties:
+      required:
+      - owner
+      type: object
+      properties:
+        owner:
+          $ref: '#/components/schemas/_Party'
+    Car_Actions:
+      type: object
+      properties:
+        changeColor:
+          type: string
+          format: uri
+          example: https://engine.example.com/npl/objects/car/Car/1ee39a43-8e4e-4b3b-8f1f-1e11ad495436/changeColor
+    Car_List:
+      required:
+      - items
+      type: object
+      properties:
+        '@prev':
+          type: string
+          format: uri
+          example: https://engine.example.com/npl/objects/car/Car/?page=1
+        '@next':
+          type: string
+          format: uri
+          example: https://engine.example.com/npl/objects/car/Car/?page=3
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Car'
+    Car_Create:
+      required:
+      - '@parties'
+      - color
+      - model
+      type: object
+      properties:
+        model:
+          type: string
+        color:
+          $ref: '#/components/schemas/Color'
+        '@parties':
+          $ref: '#/components/schemas/Car_Parties'
+    Car_ChangeColor_Command:
+      required:
+      - newColor
+      type: object
+      properties:
+        newColor:
+          $ref: '#/components/schemas/Color'
+  responses:
+    "400":
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "401":
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "403":
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "404":
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "500":
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+  parameters:
+    API_Version:
+      name: X-NPL-API
+      in: header
+      description: Optional parameter to require a specific API version
+      required: false
+      schema:
+        type: string
+    NPL_Tag:
+      name: X-NPL-TAG
+      in: header
+      description: Optional parameter to require a specific NPL Tag
+      required: false
+      schema:
+        type: string
+    ProtocolID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  securitySchemes:
+    jwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

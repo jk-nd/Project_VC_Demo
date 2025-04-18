@@ -1,0 +1,435 @@
+openapi: 3.0.1
+info:
+  title: objects.iou
+  version: "1.0"
+servers:
+- url: https://engine.example.com/
+security:
+- jwt: []
+paths:
+  /npl/objects/iou/-/openapi.json:
+    get:
+      operationId: _getOpenAPI
+      responses:
+        "200":
+          description: The OpenAPI spec
+          content:
+            application/json:
+              schema:
+                type: object
+      security: []
+  /npl/objects/iou/Iou/:
+    get:
+      operationId: _getIouList
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      responses:
+        "200":
+          description: All accessible protocol instances of this type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Iou_List'
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "500":
+          $ref: '#/components/responses/500'
+    post:
+      operationId: _createIou
+      parameters:
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Iou_Create'
+        required: true
+      responses:
+        "200":
+          description: The new protocol instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Iou'
+        "204":
+          description: No Content
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "500":
+          $ref: '#/components/responses/500'
+  /npl/objects/iou/Iou/{id}/:
+    get:
+      operationId: _getIouByID
+      parameters:
+      - $ref: '#/components/parameters/ProtocolID'
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      responses:
+        "200":
+          description: The protocol instance with this ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Iou'
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "404":
+          $ref: '#/components/responses/404'
+        "500":
+          $ref: '#/components/responses/500'
+  /npl/objects/iou/Iou/{id}/pay:
+    post:
+      operationId: Iou_pay
+      parameters:
+      - $ref: '#/components/parameters/ProtocolID'
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Iou_Pay_Command'
+        required: true
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                description: Unit
+                nullable: false
+        "204":
+          description: No Content
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "403":
+          $ref: '#/components/responses/403'
+        "404":
+          $ref: '#/components/responses/404'
+        "500":
+          $ref: '#/components/responses/500'
+  /npl/objects/iou/Iou/{id}/forgive:
+    post:
+      operationId: Iou_forgive
+      parameters:
+      - $ref: '#/components/parameters/ProtocolID'
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                description: Unit
+                nullable: false
+        "204":
+          description: No Content
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "403":
+          $ref: '#/components/responses/403'
+        "404":
+          $ref: '#/components/responses/404'
+        "500":
+          $ref: '#/components/responses/500'
+  /npl/objects/iou/Iou/{id}/getAmountOwed:
+    post:
+      operationId: Iou_getAmountOwed
+      parameters:
+      - $ref: '#/components/parameters/ProtocolID'
+      - $ref: '#/components/parameters/API_Version'
+      - $ref: '#/components/parameters/NPL_Tag'
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: number
+        "204":
+          description: No Content
+        "400":
+          $ref: '#/components/responses/400'
+        "401":
+          $ref: '#/components/responses/401'
+        "403":
+          $ref: '#/components/responses/403'
+        "404":
+          $ref: '#/components/responses/404'
+        "500":
+          $ref: '#/components/responses/500'
+components:
+  schemas:
+    _Party:
+      required:
+      - access
+      - entity
+      type: object
+      properties:
+        entity:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        access:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+      example:
+        entity:
+          iss:
+          - https://example.com
+          organization:
+          - Example
+        access:
+          preferred_email:
+          - john.doe@example.com
+    _Period:
+      required:
+      - days
+      - months
+      - weeks
+      - years
+      type: object
+      properties:
+        days:
+          type: integer
+        weeks:
+          type: integer
+        months:
+          type: integer
+        years:
+          type: integer
+    _Error:
+      type: object
+      properties:
+        errorType:
+          type: string
+        id:
+          type: string
+          format: uuid
+        idType:
+          type: string
+        message:
+          type: string
+        error:
+          type: string
+          nullable: true
+        origin:
+          type: object
+          properties:
+            value:
+              type: string
+            code:
+              type: integer
+              format: int32
+            originType:
+              type: string
+            id:
+              type: string
+            message:
+              type: string
+          nullable: true
+        stackTrace:
+          type: string
+          nullable: true
+        clientStackTrace:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              protocolId:
+                type: string
+                format: uuid
+                nullable: true
+              elementType:
+                type: string
+              location:
+                type: object
+                properties:
+                  file:
+                    type: string
+                  line:
+                    type: integer
+                    format: int32
+                  sourceRef:
+                    type: object
+                    properties:
+                      path:
+                        type: string
+                      commit:
+                        type: string
+                    nullable: true
+            nullable: true
+    Iou:
+      required:
+      - '@actions'
+      - '@id'
+      - '@parties'
+      - '@state'
+      - forAmount
+      type: object
+      properties:
+        '@id':
+          type: string
+          format: uuid
+        '@parties':
+          $ref: '#/components/schemas/Iou_Parties'
+        '@actions':
+          $ref: '#/components/schemas/Iou_Actions'
+        '@state':
+          $ref: '#/components/schemas/Iou_States'
+        forAmount:
+          type: number
+      readOnly: true
+    Iou_Parties:
+      required:
+      - issuer
+      - payee
+      type: object
+      properties:
+        issuer:
+          $ref: '#/components/schemas/_Party'
+        payee:
+          $ref: '#/components/schemas/_Party'
+    Iou_Actions:
+      type: object
+      properties:
+        pay:
+          type: string
+          format: uri
+          example: https://engine.example.com/npl/objects/iou/Iou/1ee39a43-8e4e-4b3b-8f1f-1e11ad495436/pay
+        forgive:
+          type: string
+          format: uri
+          example: https://engine.example.com/npl/objects/iou/Iou/1ee39a43-8e4e-4b3b-8f1f-1e11ad495436/forgive
+        getAmountOwed:
+          type: string
+          format: uri
+          example: https://engine.example.com/npl/objects/iou/Iou/1ee39a43-8e4e-4b3b-8f1f-1e11ad495436/getAmountOwed
+    Iou_List:
+      required:
+      - items
+      type: object
+      properties:
+        '@prev':
+          type: string
+          format: uri
+          example: https://engine.example.com/npl/objects/iou/Iou/?page=1
+        '@next':
+          type: string
+          format: uri
+          example: https://engine.example.com/npl/objects/iou/Iou/?page=3
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Iou'
+    Iou_Create:
+      required:
+      - '@parties'
+      - forAmount
+      type: object
+      properties:
+        forAmount:
+          type: number
+        '@parties':
+          $ref: '#/components/schemas/Iou_Parties'
+    Iou_States:
+      type: string
+      enum:
+      - unpaid
+      - paid
+      - forgiven
+    Iou_Pay_Command:
+      required:
+      - amount
+      type: object
+      properties:
+        amount:
+          type: number
+  responses:
+    "400":
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "401":
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "403":
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "404":
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+    "500":
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/_Error'
+  parameters:
+    API_Version:
+      name: X-NPL-API
+      in: header
+      description: Optional parameter to require a specific API version
+      required: false
+      schema:
+        type: string
+    NPL_Tag:
+      name: X-NPL-TAG
+      in: header
+      description: Optional parameter to require a specific NPL Tag
+      required: false
+      schema:
+        type: string
+    ProtocolID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  securitySchemes:
+    jwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -7,11 +7,21 @@ terraform {
   }
 }
 
+# Add variable for client secret
+variable "client_secret" {
+  type        = string
+  description = "Client secret for the engine client"
+  default     = "YOUR_CLIENT_SECRET"  # Default value, should be overridden in production
+}
+
 provider "keycloak" {
   client_id     = "admin-cli"
   username      = "admin"
   password      = "Keycloak123!"
   url           = "http://keycloak:11000"
+  initial_login = true
+  base_path     = ""  # Empty base path for master realm
+  realm         = "master"  # Explicitly authenticate against master realm
 }
 
 # Create realm
@@ -24,13 +34,15 @@ resource "keycloak_realm" "projectvc_realm" {
 
 # Create client
 resource "keycloak_openid_client" "engine_client" {
-  realm_id            = keycloak_realm.projectvc_realm.id
-  client_id           = "engine-client"
-  name               = "Engine Client"
-  enabled            = true
-  access_type        = "PUBLIC"
-  standard_flow_enabled = true
+  realm_id                     = keycloak_realm.projectvc_realm.id
+  client_id                    = "engine-client"
+  name                        = "Engine Client"
+  enabled                     = true
+  access_type                 = "CONFIDENTIAL"
+  client_secret               = var.client_secret
+  standard_flow_enabled       = true
   direct_access_grants_enabled = true
+  service_accounts_enabled    = true
   valid_redirect_uris = [
     "http://localhost:12000/*",
     "http://engine:12000/*"

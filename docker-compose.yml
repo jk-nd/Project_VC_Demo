@@ -11,15 +11,22 @@ services:
     volumes:
       - engine_data:/var/lib/postgresql/data
       - ./db_init/db_init.sh:/docker-entrypoint-initdb.d/db_init.sh
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 1s
+      timeout: 5s
+      retries: 50
 
   engine:
     build:
       context: .
       dockerfile: Dockerfile
+    env_file:
+      - .env
     ports:
       - "12000:12000"
     environment:
-      ENGINE_DEV_MODE: "true"
+      ENGINE_DEV_MODE: ${DEV_MODE:-true}
       ENGINE_DB_URL: "jdbc:postgresql://engine-db:5432/engine"
       ENGINE_DB_USER: engine
       ENGINE_DB_PASSWORD: engine
@@ -28,23 +35,30 @@ services:
       SWAGGER_ENGINE_URL: "http://localhost:12000"
       SWAGGER_SECURITY_AUTH_URL: "http://localhost:11000/realms/projectvc-realm"
       SWAGGER_SECURITY_CLIENT_ID: "engine-client"
-      ENGINE_CLIENT_SECRET: "YOUR_CLIENT_SECRET"
+      # The client secret will be loaded from .env
     depends_on:
-      - engine-db
-      - keycloak
+      engine-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
 
   read-model:
     image: ghcr.io/noumenadigital/images/read-model:latest
     ports:
-      - "5555:5555"
+      - "15000:15000"
     environment:
+      READ_MODEL_PORT: 15000
       READ_MODEL_DB_URL: "postgres://read_model:read_model_pwd@engine-db:5432/engine"
       READ_MODEL_DB_USER: read_model
+      READ_MODEL_DB_SCHEMA: noumena
       READ_MODEL_ALLOWED_ISSUERS: "http://keycloak:11000/realms/projectvc-realm"
       READ_MODEL_ENGINE_HEALTH_ENDPOINT: "http://engine:12000/actuator/health"
+      READ_MODEL_ENGINE_HEALTH_TIMEOUT_SECONDS: 250
     depends_on:
-      - engine-db
-      - engine
+      engine-db:
+        condition: service_healthy
+      engine:
+        condition: service_healthy
 
   keycloak-db:
     image: postgres:14.13-alpine
@@ -83,9 +97,15 @@ services:
     build:
       context: ./keycloak-provisioning
       dockerfile: Dockerfile
+    env_file:
+      - .env
     depends_on:
       keycloak:
         condition: service_healthy
+    environment:
+      KEYCLOAK_URL: http://keycloak:11000
+      # The client secret will be passed to Terraform through TF_VAR
+      TF_VAR_client_secret: ${ENGINE_CLIENT_SECRET}
 
 volumes:
   engine_data:

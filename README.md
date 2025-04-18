@@ -1,6 +1,6 @@
-# Project VC
+# Project VC Demo
 
-A venture capital workflow implementation using NPL (Noumena Protocol Language) for backend workflow and business process management.
+A vibe coding workflow implementation using NPL (Noumena Protocol Language) for backend workflow and business process management.
 
 ## Local Development Setup
 
@@ -13,32 +13,42 @@ A venture capital workflow implementation using NPL (Noumena Protocol Language) 
 
 1. Start the local development environment:
 ```bash
-docker-compose up -d
+docker compose up --build
 ```
 
 2. Access the services:
-- NPL Engine: http://localhost:8081
-- Keycloak Admin Console: http://localhost:8080
+- NPL Engine: http://localhost:12000
+- Keycloak Admin Console: http://localhost:11000
+- Read Model: http://localhost:5555
 - PostgreSQL: localhost:5432
 
-3. Build the NPL protocols:
-```bash
-mvn clean install
-```
+3. Authentication:
+- Default users are provisioned with the following credentials:
+  - Alice: username: `alice`, password: `alice`
+  - Bob: username: `bob`, password: `bob`
+  - Charlie: username: `charlie`, password: `charlie`
+- To get an access token, use the following endpoint:
+  ```bash
+  curl -X POST 'http://localhost:11000/realms/projectvc-realm/protocol/openid-connect/token' \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    -d 'grant_type=password' \
+    -d 'client_id=engine-client' \
+    -d 'username=alice' \
+    -d 'password=alice'
+  ```
 
 ### Project Structure
 
 ```
 .
-├── docker-compose.yml    # Docker configuration
-├── pom.xml              # Maven configuration
-├── src/                 # Source code
-│   └── main/
-│       └── npl-1.0/    # NPL protocol definitions
-│           ├── products/  # Product management protocols
-│           ├── orders/    # Order processing protocols
-│           └── users/     # User management protocols
-└── README.md           # This file
+├── docker-compose.yml           # Docker configuration
+├── keycloak-provisioning/      # Keycloak setup and user provisioning
+│   ├── Dockerfile             # Keycloak provisioning container
+│   ├── local.sh              # Provisioning script
+│   └── terraform.tf          # Keycloak configuration
+├── db_init/                   # Database initialization scripts
+│   └── db_init.sh            # Initial database setup
+└── README.md                 # This file
 ```
 
 ## Backend Components
@@ -46,25 +56,30 @@ mvn clean install
 The backend consists of several key components:
 
 1. **NPL Engine**: Handles all business logic and workflow management
+   - Port: 12000
+   - Swagger UI: http://localhost:12000/swagger-ui/
+
 2. **Keycloak**: Manages authentication and authorization
-3. **PostgreSQL**: Stores protocol state and data
+   - Port: 11000
+   - Admin Console: http://localhost:11000
+   - Realm: projectvc-realm
+   - Client: engine-client
 
-## NPL Protocols
+3. **Read Model**: Provides GraphQL interface for data access
+   - Port: 5555
+   - GraphQL Playground: http://localhost:5555/graphiql
 
-### Product Protocol
-- Manages product lifecycle (draft, active, inactive, outOfStock)
-- Handles product creation, updates, and stock management
-- Admin permissions for product management
+4. **PostgreSQL**: Stores protocol state and data
+   - Port: 5432
+   - Database: engine
 
-### Order Protocol
-- Manages order lifecycle (created, processing, shipped, delivered, cancelled)
-- Handles order creation, shipping, delivery, and cancellation
-- Customer and admin permissions for order management
+## Authentication and Authorization
 
-### User Protocol
-- Manages user lifecycle (pending, active, inactive)
-- Handles user activation, deactivation, and updates
-- Admin permissions for user management
+The system uses Keycloak for authentication and authorization:
+- OIDC client: engine-client
+- Realm: projectvc-realm
+- Users are provisioned with organization-specific attributes
+- Access tokens are required for API access
 
 ## API Documentation
 
@@ -74,4 +89,4 @@ The NPL Engine exposes REST APIs for:
 - User management
 - Workflow state management
 
-Detailed API documentation will be available at http://localhost:8081/swagger-ui.html once the services are running. # Project_VC_Demo
+Detailed API documentation is available at http://localhost:12000/swagger-ui/ once the services are running.

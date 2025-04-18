@@ -38,11 +38,10 @@ resource "keycloak_openid_client" "engine_client" {
   client_id                    = "engine-client"
   name                        = "Engine Client"
   enabled                     = true
-  access_type                 = "CONFIDENTIAL"
-  client_secret               = var.client_secret
+  access_type                 = "PUBLIC"
   standard_flow_enabled       = true
   direct_access_grants_enabled = true
-  service_accounts_enabled    = true
+  service_accounts_enabled    = false
   valid_redirect_uris = [
     "http://localhost:12000/*",
     "http://engine:12000/*"

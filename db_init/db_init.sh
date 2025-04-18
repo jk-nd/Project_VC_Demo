@@ -10,4 +10,4 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     --
     CREATE ROLE "history" LOGIN PASSWORD 'history_pwd' NOINHERIT;
     GRANT CREATE ON DATABASE "engine" TO "history";
-EOSQL 
+EOSQL

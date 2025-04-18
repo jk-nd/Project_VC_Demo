@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # the engine requires a PostgreSQL database
+  engine-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: engine
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - engine_data:/var/lib/postgresql/data
+      - ./db_init/db_init.sh:/docker-entrypoint-initdb.d/db_init.sh
+
+  engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "12000:12000"
+    environment:
+      ENGINE_DEV_MODE: "true"
+      ENGINE_DB_URL: "jdbc:postgresql://engine-db:5432/engine"
+      ENGINE_DB_USER: engine
+      ENGINE_DB_PASSWORD: engine
+      ENGINE_ALLOWED_ISSUERS: "http://keycloak:11000"
+      ENGINE_ISSUER_OVERRIDE: "http://keycloak:11000/realms/projectvc-realm"
+      SWAGGER_ENGINE_URL: "http://localhost:12000"
+      SWAGGER_SECURITY_AUTH_URL: "http://localhost:11000/realms/projectvc-realm"
+      SWAGGER_SECURITY_CLIENT_ID: "engine-client"
+      ENGINE_CLIENT_SECRET: "YOUR_CLIENT_SECRET"
+    depends_on:
+      - engine-db
+      - keycloak
+
+  read-model:
+    image: ghcr.io/noumenadigital/images/read-model:latest
+    ports:
+      - "5555:5555"
+    environment:
+      READ_MODEL_DB_URL: "postgres://read_model:read_model_pwd@engine-db:5432/engine"
+      READ_MODEL_DB_USER: read_model
+      READ_MODEL_ALLOWED_ISSUERS: "http://keycloak:11000/realms/projectvc-realm"
+      READ_MODEL_ENGINE_HEALTH_ENDPOINT: "http://engine:12000/actuator/health"
+    depends_on:
+      - engine-db
+      - engine
+
+  keycloak-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - keycloak_data:/var/lib/postgresql/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    command: start --hostname-strict=false --hostname-strict-https=false --metrics-enabled=true --db=postgres --http-port=11000
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: Keycloak123!
+      KC_DB: postgres
+      KC_DB_PASSWORD: keycloak
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_PORT: 11000
+    ports:
+      - "11000:11000"
+    depends_on:
+      - keycloak-db
+
+volumes:
+  engine_data:
+  keycloak_data: 

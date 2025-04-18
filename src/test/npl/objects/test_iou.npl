@@ -33,3 +33,27 @@ function test_overpaying(test: Test) -> {
 
     test.assertFails(function() -> iou.pay[ISSUER](101), "Overpaying should fail");
 };
+
+@test
+function test_forgive_permission(test: Test) -> {
+    var iou = Iou[ISSUER, PAYEE](100);
+    
+    // Test that payee can forgive the debt
+    iou.forgive[PAYEE]();
+    
+    // Test that the IOU is in forgiven state by attempting to pay (should fail)
+    test.assertFails(function() -> iou.pay[ISSUER](50), "Should not be able to pay after forgiveness");
+    
+    // Test that issuer cannot forgive the debt
+    var anotherIou = Iou[ISSUER, PAYEE](100);
+    test.assertFails(function() -> anotherIou.forgive[ISSUER](), "Issuer should not be able to forgive the debt");
+};
+
+@test
+function test_get_amount_owed_permissions(test: Test) -> {
+    var iou = Iou[ISSUER, PAYEE](100);
+    
+    // Test that both issuer and payee can check amount owed
+    test.assertEquals(100, iou.getAmountOwed[ISSUER](), "Issuer should be able to check amount owed");
+    test.assertEquals(100, iou.getAmountOwed[PAYEE](), "Payee should be able to check amount owed");
+};

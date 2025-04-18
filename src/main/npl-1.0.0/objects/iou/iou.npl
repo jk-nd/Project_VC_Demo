@@ -17,7 +17,9 @@ protocol[issuer, payee] Iou(var forAmount: Number) {
 
     private var payments = listOf<TimestampedAmount>();
 
-    function amountOwed() returns Number -> forAmount - total(payments);
+    function amountOwed() returns Number -> {
+        return forAmount - total(payments);
+    };
 
     @api
     permission[issuer] pay(amount: Number) | unpaid {
@@ -25,7 +27,6 @@ protocol[issuer, payee] Iou(var forAmount: Number) {
         require(amount <= amountOwed(), "Amount may not exceed amount owed");
 
         var p = TimestampedAmount(amount = amount, timestamp = now());
-
         payments = payments.with(p);
 
         if (amountOwed() == 0) {
@@ -42,4 +43,4 @@ protocol[issuer, payee] Iou(var forAmount: Number) {
     permission[issuer|payee] getAmountOwed() returns Number {
         return amountOwed();
     };
-}
+};

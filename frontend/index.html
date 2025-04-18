@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IOU Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .login-form {
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .iou-list {
+            margin-top: 20px;
+        }
+        .iou-item {
+            padding: 10px;
+            border: 1px solid #eee;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>IOU Management</h1>
+    
+    <div class="login-form">
+        <h2>Login</h2>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <button onclick="login()">Login</button>
+    </div>
+
+    <div class="iou-list" id="iouList">
+        <h2>Your IOUs</h2>
+        <div id="iouItems"></div>
+    </div>
+
+    <script>
+        let currentToken = null;
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            // Show loading state
+            const loginButton = document.querySelector('.login-form button');
+            loginButton.disabled = true;
+            loginButton.textContent = 'Logging in...';
+
+            try {
+                const response = await fetch('/proxy/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username,
+                        password
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error_description || errorData.error || 'Authentication failed');
+                }
+
+                const data = await response.json();
+                if (data.access_token) {
+                    currentToken = data.access_token;
+                    console.log('Successfully logged in, fetching IOUs...');
+                    await fetchIOUs();
+                } else {
+                    throw new Error('No access token received');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                alert(`Login failed: ${error.message}`);
+            } finally {
+                // Reset button state
+                loginButton.disabled = false;
+                loginButton.textContent = 'Login';
+            }
+        }
+
+        async function fetchIOUs() {
+            if (!currentToken) {
+                console.error('No token available');
+                return;
+            }
+
+            try {
+                const response = await fetch('/npl/objects/iou/Iou/', {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch IOUs: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('Received IOU data:', data);
+                displayIOUs(data.items || []);
+            } catch (error) {
+                console.error('Error fetching IOUs:', error);
+                alert('Failed to fetch IOUs: ' + error.message);
+            }
+        }
+
+        function displayIOUs(ious) {
+            console.log('Displaying IOUs:', ious);
+            const container = document.getElementById('iouItems');
+            container.innerHTML = '';
+
+            if (!ious || ious.length === 0) {
+                container.innerHTML = '<p>No IOUs found</p>';
+                return;
+            }
+
+            ious.forEach(iou => {
+                console.log('Processing IOU:', iou);
+                const iouElement = document.createElement('div');
+                iouElement.className = 'iou-item';
+                
+                const issuer = iou['@parties']?.issuer?.entity?.email?.[0] || 'Unknown';
+                const payee = iou['@parties']?.payee?.entity?.email?.[0] || 'Unknown';
+                const amount = iou.forAmount || 'Unknown';
+                const state = iou['@state'] || 'Unknown';
+
+                iouElement.innerHTML = `
+                    <p><strong>Amount:</strong> ${amount}</p>
+                    <p><strong>State:</strong> ${state}</p>
+                    <p><strong>Parties:</strong> Issuer: ${issuer}, Payee: ${payee}</p>
+                `;
+                container.appendChild(iouElement);
+            });
+        }
+    </script>
+</body>
+</html> 

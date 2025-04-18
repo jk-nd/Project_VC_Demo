@@ -40,16 +40,39 @@ resource "keycloak_openid_client" "engine_client" {
   enabled                     = true
   access_type                 = "PUBLIC"
   standard_flow_enabled       = true
+  implicit_flow_enabled       = false
   direct_access_grants_enabled = true
   service_accounts_enabled    = false
+  base_url                    = "http://localhost:5173"
   valid_redirect_uris = [
     "http://localhost:12000/*",
-    "http://engine:12000/*"
+    "http://engine:12000/*",
+    "http://localhost:5173/*",
+    "http://localhost/*",
+    "http://localhost/auth/realms/projectvc-realm/*",
+    "http://localhost:5173/realms/projectvc-realm/*"
   ]
-  web_origins        = [
+  web_origins = [
     "http://localhost:12000",
     "http://engine:12000",
+    "http://localhost:5173",
+    "http://localhost",
+    "http://localhost/auth",
     "+"
+  ]
+  root_url = "http://localhost:5173"
+}
+
+# Add protocol mappers for the client
+resource "keycloak_openid_client_default_scopes" "client_default_scopes" {
+  realm_id  = keycloak_realm.projectvc_realm.id
+  client_id = keycloak_openid_client.engine_client.id
+
+  default_scopes = [
+    "profile",
+    "email",
+    "roles",
+    "web-origins"
   ]
 }
 

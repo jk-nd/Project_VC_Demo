@@ -16,7 +16,7 @@ const collapsedDrawerWidth = 73;
 export default function MainLayout() {
     const { logout, tokenParsed, isLoggedIn } = useAuth();
     const [expanded, setExpanded] = useState(false);
-    const [selectedItem, setSelectedItem] = useState('dashboard');
+    const [selectedItem, setSelectedItem] = useState('overview');
     const [isDrawerOpen, setIsDrawerOpen] = useState(true);
 
     if (!isLoggedIn) {
@@ -32,7 +32,7 @@ export default function MainLayout() {
     }
 
     const menuItems = [
-        { text: 'Dashboard', icon: <ListIcon />, path: 'dashboard' },
+        { text: 'Overview', icon: <ListIcon />, path: 'overview' },
         { text: 'Create IOU', icon: <AddIcon />, path: 'create' },
     ];
 
@@ -232,7 +232,7 @@ export default function MainLayout() {
                         )}
                     </Paper>
 
-                    {selectedItem === 'dashboard' && (
+                    {selectedItem === 'overview' && (
                         <Paper sx={{ p: 3 }}>
                             <Typography variant="h5" gutterBottom>
                                 View My IOUs

@@ -1,6 +1,9 @@
 import { AxiosError } from 'axios';
 import { IOU } from '../types/IOU';
 import { createIOU as apiCreateIOU, getIOUs as apiGetIOUs, getIOU as apiGetIOU, payIOU as apiPayIOU, forgiveIOU as apiForgiveIOU } from './api';
+import { useAuth } from '../auth/KeycloakContext';
+import api from './api';
+import { validateUserEmail } from './userService';
 
 interface CreateIOURequest {
     forAmount: number;
@@ -95,7 +98,31 @@ export const iouService = {
 export const createIOU = async (payeeEmail: string, amount: number): Promise<IOU> => {
     try {
         console.log('Creating IOU with:', { payeeEmail, amount });
-        const userEmail = localStorage.getItem('userEmail') || 'alice@tech.nd';
+        
+        // Get the current user's email from the token
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Not authenticated');
+        }
+        
+        // Parse the token to get user info
+        const tokenData = JSON.parse(atob(token.split('.')[1]));
+        const userEmail = tokenData.email;
+        
+        if (!userEmail) {
+            throw new Error('User email not found in token');
+        }
+
+        // Validate that payee is not the issuer
+        if (payeeEmail.toLowerCase() === userEmail.toLowerCase()) {
+            throw new Error('You cannot create an IOU to yourself');
+        }
+
+        // Validate that payee exists in the system
+        const payeeExists = await validateUserEmail(payeeEmail);
+        if (!payeeExists) {
+            throw new Error('The specified payee is not registered in the system');
+        }
         
         const requestData = {
             forAmount: amount,
@@ -129,7 +156,6 @@ export const createIOU = async (payeeEmail: string, amount: number): Promise<IOU
             status: mapStateToStatus(response.data['@state']),
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            // Add the derived fields
             issuerEmail: userEmail,
             recipientEmail: payeeEmail
         };

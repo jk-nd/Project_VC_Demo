@@ -1,54 +1,76 @@
-# React + TypeScript + Vite
+# Project VC Demo - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is the frontend application for the Project VC Demo, built with React, TypeScript, and Vite.
 
-Currently, two official plugins are available:
+## Technology Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **React**: UI library
+- **TypeScript**: Type safety
+- **Vite**: Build tool and development server
+- **Material UI**: Component library for consistent design
+- **Axios**: HTTP client for API requests
+- **Keycloak**: Authentication integration
 
-## Expanding the ESLint configuration
+## Directory Structure
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```
+frontend/
+├── public/          # Static assets
+├── src/
+│   ├── auth/        # Authentication related code
+│   ├── components/  # React components
+│   │   ├── iou/     # IOU-specific components
+│   │   └── layout/  # Layout components
+│   ├── contexts/    # React contexts
+│   ├── hooks/       # Custom React hooks
+│   ├── models/      # TypeScript interfaces and types
+│   ├── services/    # API services
+│   └── utils/       # Utility functions
+├── vite.config.ts   # Vite configuration
+└── tsconfig.json    # TypeScript configuration
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Getting Started
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+1. Install dependencies:
+```bash
+npm install
 ```
+
+2. Start the development server:
+```bash
+npm run dev
+```
+
+The application will be available at http://localhost:5173
+
+## API Integration
+
+The frontend communicates with the NPL backend through API services defined in `src/services/`.
+
+Key services include:
+- `api.ts`: Base API configuration with Axios
+- `authService.ts`: Authentication-related API calls
+- `iouService.ts`: IOU-related API calls
+
+## Proxy Configuration
+
+The Vite development server is configured to proxy API requests to avoid CORS issues:
+
+- API requests (`/backend/*`) are proxied to the NPL engine (http://localhost:12000)
+- Authentication requests (`/auth/*`) are proxied to Keycloak (http://localhost:80)
+
+## Build for Production
+
+```bash
+npm run build
+```
+
+This generates optimized assets in the `dist/` directory that can be served by any static file server.
+
+## Additional Commands
+
+- `npm run lint`: Run ESLint to check for code issues
+- `npm run preview`: Preview the production build locally
+
+For more details about the overall project architecture and backend setup, refer to the main [README.md](../README.md) file at the root of the repository.

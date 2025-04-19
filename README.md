@@ -1,13 +1,21 @@
 # Project VC Demo
 
-This project demonstrates a full-stack application with a backend in NPL and a frontend using Vite.
+This project demonstrates a full-stack application for IOU (I Owe You) management with a backend in NPL and a React frontend.
+
+## Features
+
+- **Create IOUs**: Users can create digital IOUs specifying recipient and amount
+- **Search Functionality**: Search IOUs by various criteria (issuer, payee, state, amount)
+- **Pay IOUs**: Make partial or full payments towards outstanding IOUs
+- **Forgive IOUs**: Recipients can forgive debts entirely
+- **User Authentication**: Secure login with role-based access control
 
 ## Architecture
 
 The project consists of several components:
 
-- **Frontend**: A React application built with Vite
-- **Backend**: An NPL engine service
+- **Frontend**: A React application built with Vite, Material UI, and TypeScript
+- **Backend**: An NPL engine service running IOU protocols
 - **Authentication**: Keycloak for identity management
 - **Proxy**: Nginx for routing requests
 
@@ -73,11 +81,19 @@ Important notes about the proxy configuration:
 
 ## Authentication
 
-The application uses Keycloak for authentication. The configuration is in `frontend/src/auth/keycloak.ts`.
+The application uses Keycloak for authentication. The configuration is in `frontend/src/auth/KeycloakContext.tsx`.
 
-## Nginx Configuration
+## NPL IOU Protocol
 
-Nginx is used to route requests between services. The configuration is in `nginx.conf`.
+The backend is powered by NPL (Noumena Protocol Language), which defines the IOU protocol with the following states:
+- `unpaid`: Initial state when an IOU is created
+- `paid`: Final state when an IOU is fully paid
+- `forgiven`: Final state when an IOU is forgiven by the payee
+
+Key permissions include:
+- `pay`: Allows the issuer to make payments toward the IOU
+- `forgive`: Allows the payee to forgive the IOU
+- `getAmountOwed`: Returns the current outstanding amount
 
 ## License
 
@@ -123,13 +139,14 @@ docker compose up --build
 ```
 .
 ├── docker-compose.yml           # Docker configuration
-├── keycloak-provisioning/      # Keycloak setup and user provisioning
-│   ├── Dockerfile             # Keycloak provisioning container
-│   ├── local.sh              # Provisioning script
-│   └── terraform.tf          # Keycloak configuration
-├── db_init/                   # Database initialization scripts
-│   └── db_init.sh            # Initial database setup
-└── README.md                 # This file
+├── frontend/                    # React frontend application
+├── keycloak-provisioning/       # Keycloak setup and user provisioning
+│   ├── Dockerfile               # Keycloak provisioning container
+│   ├── local.sh                 # Provisioning script
+│   └── terraform.tf             # Keycloak configuration
+├── db_init/                     # Database initialization scripts
+│   └── db_init.sh               # Initial database setup
+└── README.md                    # This file
 ```
 
 ## Backend Components

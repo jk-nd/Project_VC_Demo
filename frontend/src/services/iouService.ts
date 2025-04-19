@@ -1,7 +1,5 @@
-import { AxiosError } from 'axios';
 import { IOU } from '../types/IOU';
 import { createIOU as apiCreateIOU, getIOUs as apiGetIOUs, getIOU as apiGetIOU, payIOU as apiPayIOU, forgiveIOU as apiForgiveIOU } from './api';
-import { useAuth } from '../auth/KeycloakContext';
 import api from './api';
 import { validateUserEmail } from './userService';
 
@@ -21,35 +19,6 @@ interface CreateIOURequest {
             access: Record<string, never>;
         };
     };
-}
-
-interface IOUResponse {
-    '@id': string;
-    '@actions': {
-        pay?: string;
-        getAmountOwed?: string;
-    };
-    '@parties': {
-        issuer: {
-            entity: {
-                email: string[];
-            };
-            access: Record<string, never>;
-        };
-        payee: {
-            entity: {
-                email: string[];
-            };
-            access: Record<string, never>;
-        };
-    };
-    '@state': string;
-    forAmount: number;
-}
-
-interface IOUListResponse {
-    items: IOUResponse[];
-    page: number;
 }
 
 // Map backend states to our IOU status types

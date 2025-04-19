@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { IOU } from '../types/IOU';
 
 const api = axios.create({
   baseURL: '',  // Use relative paths since Vite will proxy the requests

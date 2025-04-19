@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, AppBar, Toolbar, Typography, Button, Container, Paper, Avatar, Drawer, List, ListItemButton, ListItemIcon, ListItemText, Accordion, AccordionSummary, AccordionDetails, IconButton } from '@mui/material';
+import { Box, AppBar, Toolbar, Typography, Button, Paper, Avatar, Drawer, List, ListItemButton, ListItemIcon, ListItemText, Accordion, AccordionSummary, AccordionDetails, IconButton } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ListIcon from '@mui/icons-material/List';
 import AddIcon from '@mui/icons-material/Add';
@@ -10,7 +10,7 @@ import PaymentIcon from '@mui/icons-material/Payment';
 import { useAuth } from '../../auth/KeycloakContext';
 import { Navigate } from 'react-router-dom';
 import IOUTable from '../iou/IOUTable';
-import CreateIOUForm from '../iou/CreateIOUForm';
+import CreateIOU from '../iou/CreateIOU';
 import ForgiveIOUScreen from '../iou/ForgiveIOUScreen';
 import PayIOUScreen from '../iou/PayIOUScreen';
 
@@ -241,11 +241,11 @@ export default function MainLayout() {
                     {selectedItem === 'overview' && (
                         <Paper sx={{ p: 3 }}>
                             <Typography variant="h5" gutterBottom>
-                                View My IOUs
+                                Search
                             </Typography>
                             <Accordion 
                                 expanded={expanded}
-                                onChange={(event, isExpanded) => setExpanded(isExpanded)}
+                                onChange={(_, isExpanded) => setExpanded(isExpanded)}
                             >
                                 <AccordionSummary
                                     expandIcon={<ExpandMoreIcon />}
@@ -266,7 +266,7 @@ export default function MainLayout() {
                             <Typography variant="h5" gutterBottom>
                                 Create a New IOU
                             </Typography>
-                            <CreateIOUForm />
+                            <CreateIOU />
                         </Paper>
                     )}
 

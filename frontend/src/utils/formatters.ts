@@ -10,3 +10,26 @@ export const formatCurrency = (value: number, currencyCode: string = 'USD'): str
     currency: currencyCode,
   }).format(value);
 }; 
+
+/**
+ * Format a date string as a localized date string
+ * @param dateString - The date string to format
+ * @returns Formatted date string
+ */
+export const formatDate = (dateString: string | undefined): string => {
+  if (!dateString) return 'Unknown';
+  
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid Date';
+  }
+}; 

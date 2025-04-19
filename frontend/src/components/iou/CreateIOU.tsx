@@ -9,10 +9,12 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  SelectChangeEvent
+  SelectChangeEvent,
+  Alert,
+  Snackbar
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import iouService from '../../services/iouService';
+import { createIOU } from '../../services/iouService';
 
 const CreateIOU = () => {
   const navigate = useNavigate();
@@ -21,19 +23,28 @@ const CreateIOU = () => {
     amount: '',
     currency: 'USD'
   });
+  const [error, setError] = useState<string | null>(null);
+  const [showError, setShowError] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+    
     try {
-      await iouService.createIOU({
-        to: formData.to,
-        amount: Number(formData.amount),
-        currency: formData.currency,
-        from: '' // Will be set by backend based on token
-      });
+      // Add @tech.nd email suffix if not included
+      const payeeEmail = formData.to.includes('@') 
+        ? formData.to 
+        : `${formData.to}@tech.nd`;
+        
+      await createIOU(
+        payeeEmail,
+        Number(formData.amount)
+      );
       navigate('/list');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create IOU:', error);
+      setError(error.message || 'Failed to create IOU');
+      setShowError(true);
     }
   };
 
@@ -53,6 +64,10 @@ const CreateIOU = () => {
     }));
   };
 
+  const handleCloseError = () => {
+    setShowError(false);
+  };
+
   return (
     <Box component={Paper} sx={{ p: 3, maxWidth: 500, mx: 'auto' }}>
       <Typography variant="h4" gutterBottom>
@@ -61,13 +76,13 @@ const CreateIOU = () => {
       <form onSubmit={handleSubmit}>
         <TextField
           fullWidth
-          label="To (Username)"
+          label="To (Username or Email)"
           name="to"
           value={formData.to}
           onChange={handleTextChange}
           margin="normal"
           required
-          helperText="Enter the username (e.g., alice, bob, charlie)"
+          helperText="Enter username (e.g., alice) or full email"
         />
         <TextField
           fullWidth
@@ -103,6 +118,12 @@ const CreateIOU = () => {
           </Button>
         </Box>
       </form>
+      
+      <Snackbar open={showError} autoHideDuration={6000} onClose={handleCloseError}>
+        <Alert onClose={handleCloseError} severity="error" sx={{ width: '100%' }}>
+          {error}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

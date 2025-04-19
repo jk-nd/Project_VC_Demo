@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, TextField, Button, Typography, Alert, Autocomplete } from '@mui/material';
+import { Box, TextField, Button, Alert, Autocomplete } from '@mui/material';
 import { createIOU } from '../../services/iouService';
 import { getUserSuggestions, User } from '../../services/userService';
 
@@ -78,7 +78,7 @@ export default function CreateIOUForm({ onIOUCreated }: { onIOUCreated?: () => v
     };
 
     const handleUserChange = (
-        event: React.SyntheticEvent, 
+        _: React.SyntheticEvent, 
         value: string | User | null
     ) => {
         if (value && typeof value !== 'string' && 'email' in value) {
@@ -91,7 +91,7 @@ export default function CreateIOUForm({ onIOUCreated }: { onIOUCreated?: () => v
     };
 
     const handleInputChange = (
-        event: React.SyntheticEvent, 
+        _: React.SyntheticEvent, 
         value: string
     ) => {
         setSearchTerm(value);

@@ -19,7 +19,7 @@ export const getParsedToken = () => {
     return keycloakInstance.tokenParsed;
 };
 
-export const directLogin = async (username: string, password: string) => {
+export const directLogin = async (username: string) => {
     try {
         // Use loginHint since direct username/password login isn't supported in this way
         const response = await keycloakInstance.login({

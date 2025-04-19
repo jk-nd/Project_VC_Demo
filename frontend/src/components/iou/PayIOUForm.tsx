@@ -73,7 +73,7 @@ const PayIOUForm: React.FC<PayIOUFormProps> = ({ iou, open, onClose }) => {
       <DialogContent>
         <Box sx={{ mb: 2 }}>
           <Typography variant="body1" gutterBottom>
-            <strong>Recipient:</strong> {iou.payeeEmail}
+            <strong>Recipient:</strong> {iou.recipientEmail}
           </Typography>
           <Typography variant="body1" gutterBottom>
             <strong>Total Amount:</strong> ${iou.forAmount.toFixed(2)} USD

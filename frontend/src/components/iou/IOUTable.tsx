@@ -7,42 +7,18 @@ import { Box, Typography, Paper, Button, Stack, Dialog, DialogTitle, DialogConte
 import SearchIcon from '@mui/icons-material/Search';
 import Autocomplete from '@mui/material/Autocomplete';
 import { IOU } from '../../types/IOU';
-import { fetchUserIOUs, createIOU, payIOU, getIOU } from '../../services/iouService';
+import { fetchUserIOUs, payIOU } from '../../services/iouService';
 import { useAuth } from '../../auth/KeycloakContext';
 import api from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import CreateIOUForm from './CreateIOUForm';
 
-interface IOUResponse {
-    '@id': string;
-    '@parties': {
-        issuer: {
-            entity: {
-                email: string[];
-            };
-            access: Record<string, never>;
-        };
-        payee: {
-            entity: {
-                email: string[];
-            };
-            access: Record<string, never>;
-        };
-    };
-    '@state': string;
-    '@actions'?: {
-        pay?: string;
-        forgive?: string;
-        getAmountOwed?: string;
-    } | string[];
-    forAmount: number;
-}
-
+// Remove unused type
 // Define generic parameter types for handlers that need them
-type GridParams = {
-    row?: any;
-    value?: any;
-};
+// type GridParams = {
+//     row?: any;
+//     value?: any;
+// };
 
 export default function IOUTable() {
     const { tokenParsed, getToken } = useAuth();
@@ -53,6 +29,9 @@ export default function IOUTable() {
     const [error, setError] = useState<string | null>(null);
     const [showDebug, setShowDebug] = useState(false);
     const [rawData, setRawData] = useState<any>(null);
+    
+    // Add state for transformed IOUs with amount owed
+    const [transformedIous, setTransformedIous] = useState<any[]>([]);
     
     // Payment dialog state
     const [payDialogOpen, setPayDialogOpen] = useState(false);
@@ -69,13 +48,13 @@ export default function IOUTable() {
     // Create IOU dialog state
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-    const loadIOUs = async () => {
-        try {
-            setLoading(true);
-            setError(null);
+        const loadIOUs = async () => {
+            try {
+                setLoading(true);
+                setError(null);
             
             console.log('IOUTable: Loading IOUs...');
-            const data = await fetchUserIOUs();
+                const data = await fetchUserIOUs();
             
             console.log('IOUTable: Received data from service:', 
                         JSON.stringify(data, null, 2));
@@ -98,18 +77,104 @@ export default function IOUTable() {
                 // Make sure data is in the right format for the DataGrid
                 setIous(data);
                 setFilteredIous(data);
+
+                // Transform the IOUs to include amountOwed
+                try {
+                    const token = await getToken();
+                    const transformedIouPromises = data.map(async (iou) => {
+                        let amountOwed = iou.forAmount; // Default to total amount
+
+                        try {
+                            if (typeof iou['@actions'] === 'object' && 'getAmountOwed' in iou['@actions']) {
+                                const getAmountOwedUrl = (iou['@actions'] as { [key: string]: string })['getAmountOwed'];
+                                if (getAmountOwedUrl) {
+                                    console.log(`Fetching amount owed for IOU ${iou['@id']} from: ${getAmountOwedUrl}`);
+                                    // Extract path if it's a full URL
+                                    let amountOwedPath = getAmountOwedUrl;
+                                    if (getAmountOwedUrl.startsWith('http')) {
+                                        try {
+                                            const urlObj = new URL(getAmountOwedUrl);
+                                            amountOwedPath = urlObj.pathname;
+                                        } catch (e) {
+                                            console.error('Failed to parse URL, using as-is:', getAmountOwedUrl);
+                                        }
+                                    }
+                                    
+                                    try {
+                                        // Try POST request first
+                                        const amountOwedResponse = await api.post(amountOwedPath, {}, {
+                                            headers: {
+                                                Authorization: `Bearer ${token}`
+                                            }
+                                        });
+                                        console.log(`Amount owed response for ${iou['@id']}:`, amountOwedResponse.data);
+                                        
+                                        if (typeof amountOwedResponse.data === 'number') {
+                                            amountOwed = amountOwedResponse.data;
+                                        }
+                                    } catch (error: any) {
+                                        console.error(`Error fetching amount owed for IOU ${iou['@id']}:`, error);
+                                        if (error.response && error.response.status === 405) {
+                                            console.log('Received Method Not Allowed error, trying GET request instead');
+                                            try {
+                                                const getResponse = await api.get(amountOwedPath, {
+                                                    headers: {
+                                                        Authorization: `Bearer ${token}`
+                                                    }
+                                                });
+                                                console.log(`GET Amount owed response for ${iou['@id']}:`, getResponse.data);
+                                                
+                                                if (typeof getResponse.data === 'number') {
+                                                    amountOwed = getResponse.data;
+                                                }
+                                            } catch (getError) {
+                                                console.error(`GET request for amount owed also failed for IOU ${iou['@id']}:`, getError);
+                                                // Use default amount
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (error) {
+                            console.error(`Error processing IOU ${iou['@id']}:`, error);
+                            // Use default amount
+                        }
+                        
+                        return {
+                            ...iou,
+                            amountOwed
+                        };
+                    });
+                    
+                    // Wait for all the amountOwed API calls to complete
+                    const transformed = await Promise.all(transformedIouPromises);
+                    console.log('Transformed IOUs with amount owed:', transformed);
+                    setTransformedIous(transformed);
+                } catch (transformError) {
+                    console.error('Error transforming IOUs with amount owed:', transformError);
+                    // Still set the transformed IOUs with default values
+                    setTransformedIous(data.map(iou => ({
+                        ...iou,
+                        amountOwed: iou.forAmount
+                    })));
+                }
             } else {
                 console.log('No IOUs found or data is not an array');
                 setIous([]);
                 setFilteredIous([]);
+                setTransformedIous([]);
             }
-        } catch (err) {
+            } catch (err) {
             console.error('Error loading IOUs:', err);
-            setError(err instanceof Error ? err.message : 'Failed to load IOUs');
-        } finally {
-            setLoading(false);
-        }
-    };
+                setError(err instanceof Error ? err.message : 'Failed to load IOUs');
+            // Clear any partial data
+            setIous([]);
+            setFilteredIous([]);
+            setTransformedIous([]);
+            } finally {
+                setLoading(false);
+            }
+        };
 
     useEffect(() => {
         loadIOUs();
@@ -146,6 +211,11 @@ export default function IOUTable() {
                         return iou['@id'] && iou['@id'].toLowerCase().includes(searchValue);
                     case 'amount':
                         return iou.forAmount && iou.forAmount.toString().includes(searchValue);
+                    case 'owed':
+                        // For amount owed, we need to check in the transformedIous array
+                        const transformedIou = transformedIous.find(item => item['@id'] === iou['@id']);
+                        return transformedIou && transformedIou.amountOwed && 
+                               transformedIou.amountOwed.toString().includes(searchValue);
                     default:
                         return false;
                 }
@@ -161,7 +231,7 @@ export default function IOUTable() {
             );
         });
         setFilteredIous(filtered);
-    }, [searchTerm, ious]);
+    }, [searchTerm, ious, transformedIous]);
 
     // Generate search suggestions from the data
     const searchSuggestions = useMemo(() => {
@@ -176,8 +246,15 @@ export default function IOUTable() {
             suggestions.add(`amount:${iou.forAmount}`);
         });
         
+        // Add amount owed suggestions if available
+        transformedIous.forEach(iou => {
+            if (iou.amountOwed !== undefined) {
+                suggestions.add(`owed:${iou.amountOwed}`);
+            }
+        });
+        
         return Array.from(suggestions);
-    }, [ious]);
+    }, [ious, transformedIous]);
 
     // Check if the current user is the issuer of the IOU
     const userIsIssuer = (iou: IOU) => {
@@ -259,13 +336,15 @@ export default function IOUTable() {
             // Call the pay API
             await payIOU(selectedIou['@id'], amount);
             
-            // Refresh IOUs after successful payment
-            await loadIOUs();
-            
             // Close dialog
             setPayDialogOpen(false);
+            
+            // Reset state
             setSelectedIou(null);
             setPaymentAmount('');
+            
+            // Refresh IOUs after successful payment
+            await loadIOUs();
         } catch (error: any) {
             console.error('Error processing payment:', error);
             setPaymentError(error.message || 'Failed to process payment');
@@ -339,27 +418,19 @@ export default function IOUTable() {
                 }
             }
             
-            // Refresh IOUs after successful forgiveness
-            await loadIOUs();
-            
             // Close dialog
             setForgiveDialogOpen(false);
+            
+            // Reset state
             setSelectedIou(null);
+            
+            // Refresh IOUs after successful forgiveness
+            await loadIOUs();
         } catch (error: any) {
             console.error('Error forgiving IOU:', error);
             setForgiveError(error.message || 'Failed to forgive IOU');
         } finally {
             setForgiveProcessing(false);
-        }
-    };
-
-    const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setSearchTerm(event.target.value);
-    };
-
-    const handleSearchOptionSelected = (event: React.SyntheticEvent, value: string | null) => {
-        if (value) {
-            setSearchTerm(value);
         }
     };
 
@@ -391,7 +462,7 @@ export default function IOUTable() {
         },
         {
             field: 'forAmount',
-            headerName: 'Amount',
+            headerName: 'Total Amount',
             type: 'number',
             width: 130,
             renderCell: (params) => {
@@ -399,6 +470,20 @@ export default function IOUTable() {
                 return (
                     <Typography>
                         {formatCurrency(amount)}
+                    </Typography>
+                );
+            }
+        },
+        {
+            field: 'amountOwed',
+            headerName: 'Amount Owed',
+            type: 'number',
+            width: 130,
+            renderCell: (params) => {
+                const amountOwed = params.row.amountOwed !== undefined ? Number(params.row.amountOwed) : Number(params.row.forAmount) || 0;
+                return (
+                    <Typography>
+                        {formatCurrency(amountOwed)}
                     </Typography>
                 );
             }
@@ -502,13 +587,12 @@ export default function IOUTable() {
                     freeSolo
                     options={searchSuggestions}
                     inputValue={searchTerm}
-                    onInputChange={(event, newValue) => setSearchTerm(newValue)}
+                    onInputChange={(_, newValue) => setSearchTerm(newValue || '')}
                     renderInput={(params) => (
                         <TextField
                             {...params}
                             variant="outlined"
                             placeholder="Search by issuer, payee, state, amount, or ID..."
-                            onChange={handleSearchChange}
                             fullWidth
                             InputProps={{
                                 ...params.InputProps,
@@ -526,17 +610,14 @@ export default function IOUTable() {
                     renderOption={(props, option) => {
                         // Parse the option to display it nicely
                         let [type, value] = ['', ''];
-                        if (option.includes(':')) {
+                        if (typeof option === 'string' && option.includes(':')) {
                             [type, value] = option.split(':');
-                        } else {
+                        } else if (typeof option === 'string') {
                             value = option;
                         }
                         
-                        // Extract key from props to avoid React warning
-                        const { key, ...otherProps } = props;
-                        
                         return (
-                            <li key={key} {...otherProps}>
+                            <li {...props}>
                                 {type && (
                                     <Chip 
                                         label={type} 
@@ -548,11 +629,11 @@ export default function IOUTable() {
                             </li>
                         );
                     }}
-
-                    // Fix search when selecting an option
-                    onChange={(event, value) => {
-                        if (value) {
-                            setSearchTerm(value);
+                    
+                    // Handle option selection
+                    onChange={(_, newValue) => {
+                        if (newValue && typeof newValue === 'string') {
+                            setSearchTerm(newValue);
                         }
                     }}
                 />
@@ -597,22 +678,21 @@ export default function IOUTable() {
                 </Paper>
             )}
             
+            <Box sx={{ height: 400, width: '100%' }}>
             <DataGrid
-                rows={filteredIous}
+                    rows={transformedIous.length > 0 ? transformedIous : filteredIous}
                 columns={columns}
+                    getRowId={(row) => row['@id']}
                 loading={loading}
-                pageSizeOptions={[5, 10, 25, 100]}
-                initialState={{
-                    pagination: {
-                        paginationModel: {
-                            pageSize: 5,
+                    initialState={{
+                        pagination: {
+                            paginationModel: { pageSize: 5, page: 0 },
                         },
-                    },
-                }}
+                    }}
+                pageSizeOptions={[5, 10, 25]}
                 disableRowSelectionOnClick
-                autoHeight
-                getRowId={(row) => row['@id']}
-            />
+                />
+            </Box>
 
             {/* Payment Dialog */}
             <Dialog open={payDialogOpen} onClose={() => setPayDialogOpen(false)}>
@@ -711,19 +791,3 @@ export default function IOUTable() {
         </Box>
     );
 }
-
-// Helper function to map backend states to our IOU status types
-const mapStateToStatus = (state: string): IOU['status'] => {
-    switch (state.toLowerCase()) {
-        case 'unpaid':
-            return 'PENDING';
-        case 'paid':
-            return 'PAID';
-        case 'accepted':
-            return 'ACCEPTED';
-        case 'rejected':
-            return 'REJECTED';
-        default:
-            return 'PENDING';
-    }
-}; 

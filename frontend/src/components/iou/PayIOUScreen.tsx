@@ -23,15 +23,15 @@ interface IOUResponse {
   '@state'?: string;
 }
 
+// Remove unused type declaration
 // Define parameter type for grid handlers
-type GridParams = {
-  row: IOUResponse;
-  value?: any;
-};
+// type GridParams = {
+//   row: IOUResponse;
+//   value?: any;
+// };
 
 const PayIOUScreen: React.FC = () => {
   const { tokenParsed, getToken } = useAuth();
-  const [ious, setIous] = useState<IOUResponse[]>([]);
   const [transformedIous, setTransformedIous] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -236,7 +236,6 @@ const PayIOUScreen: React.FC = () => {
       
       console.log('Transformed IOUs for DataGrid:', transformed);
       
-      setIous(iouList);
       setTransformedIous(transformed);
       
       if (iouList.length === 0) {

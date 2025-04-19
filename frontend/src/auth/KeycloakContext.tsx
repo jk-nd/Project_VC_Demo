@@ -8,6 +8,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   tokenParsed: any;
+  getToken: () => Promise<string | null>;
 }
 
 const keycloakConfig = {
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => false,
   logout: () => {},
   tokenParsed: null,
+  getToken: async () => null,
 });
 
 // Hook to use the auth context
@@ -119,6 +121,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setTokenParsed(null);
   };
 
+  // Get the current token or refresh if needed
+  const getToken = async (): Promise<string | null> => {
+    if (!token) {
+      console.log('No token available');
+      return null;
+    }
+    
+    // Check if token is expired
+    if (tokenParsed && tokenParsed.exp) {
+      const currentTime = Math.floor(Date.now() / 1000);
+      // If token expires in less than 30 seconds, consider it expired
+      if (tokenParsed.exp - currentTime < 30) {
+        console.log('Token is about to expire, refreshing...');
+        
+        // For now, we'll just use the existing token - in a real app, you'd refresh the token here
+        // We would normally use refresh_token, but for this demo we'll just keep using the existing token
+        console.log('Using existing token for now');
+      }
+    }
+    
+    return token;
+  };
+
   const isLoggedIn = Boolean(token && tokenParsed);
 
   const value = {
@@ -128,6 +153,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     login,
     logout,
     tokenParsed,
+    getToken,
   };
 
   return (

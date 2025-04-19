@@ -3,9 +3,13 @@ import {
     DataGrid, 
     GridColDef
 } from '@mui/x-data-grid';
-import { Box, Typography, Paper, Button, Stack } from '@mui/material';
+import { Box, Typography, Paper, Button, Stack, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress } from '@mui/material';
 import { IOU } from '../../types/IOU';
-import { fetchUserIOUs, createIOU } from '../../services/iouService';
+import { fetchUserIOUs, createIOU, payIOU, getIOU } from '../../services/iouService';
+import { useAuth } from '../../auth/KeycloakContext';
+import api from '../../services/api';
+import { formatCurrency } from '../../utils/formatters';
+import CreateIOUForm from './CreateIOUForm';
 
 interface IOUResponse {
     '@id': string;
@@ -24,6 +28,11 @@ interface IOUResponse {
         };
     };
     '@state': string;
+    '@actions'?: {
+        pay?: string;
+        forgive?: string;
+        getAmountOwed?: string;
+    } | string[];
     forAmount: number;
 }
 
@@ -33,135 +42,28 @@ type GridParams = {
     value?: any;
 };
 
-const columns: GridColDef[] = [
-    { 
-        field: '@id', 
-        headerName: 'ID', 
-        width: 200,
-        renderCell: (params) => {
-            const id = params.row['@id'] || '';
-            return <Typography>{id.substring(0, 8)}...</Typography>;
-        }
-    },
-    { 
-        field: 'issuerEmail', 
-        headerName: 'Issuer', 
-        width: 150,
-        renderCell: (params) => {
-            return <Typography>{params.row.issuerEmail || 'Unknown'}</Typography>;
-        }
-    },
-    { 
-        field: 'recipientEmail', 
-        headerName: 'Recipient', 
-        width: 150,
-        renderCell: (params) => {
-            return <Typography>{params.row.recipientEmail || 'Unknown'}</Typography>;
-        }
-    },
-    {
-        field: 'forAmount',
-        headerName: 'Amount',
-        type: 'number',
-        width: 130,
-        renderCell: (params) => {
-            const amount = Number(params.row.forAmount) || 0;
-            return (
-                <Typography>
-                    {new Intl.NumberFormat('en-US', {
-                        style: 'currency',
-                        currency: 'USD',
-                    }).format(amount)}
-                </Typography>
-            );
-        }
-    },
-    {
-        field: '@state',
-        headerName: 'Status',
-        width: 130,
-        renderCell: (params) => {
-            const status = params.row['@state'] || 'unknown';
-            const colorMap: Record<string, string> = {
-                'unpaid': 'warning.main',
-                'paid': 'success.main',
-                'rejected': 'error.main',
-                'accepted': 'info.main',
-            };
-            return (
-                <Typography
-                    sx={{
-                        color: colorMap[status] || 'text.primary',
-                    }}
-                >
-                    {status.toUpperCase()}
-                </Typography>
-            );
-        },
-    },
-    {
-        field: 'createdAt',
-        headerName: 'Created',
-        width: 180,
-        renderCell: (params) => {
-            try {
-                const dateStr = params.row.createdAt;
-                if (!dateStr) return <Typography>-</Typography>;
-                
-                const date = new Date(dateStr);
-                return <Typography>{date.toLocaleString()}</Typography>;
-            } catch (e) {
-                return <Typography>-</Typography>;
-            }
-        }
-    },
-    {
-        field: 'updatedAt',
-        headerName: 'Last Updated',
-        width: 180,
-        renderCell: (params) => {
-            try {
-                const dateStr = params.row.updatedAt;
-                if (!dateStr) return <Typography>-</Typography>;
-                
-                const date = new Date(dateStr);
-                return <Typography>{date.toLocaleString()}</Typography>;
-            } catch (e) {
-                return <Typography>-</Typography>;
-            }
-        }
-    },
-    {
-        field: 'actions',
-        headerName: 'Actions',
-        width: 150,
-        sortable: false,
-        filterable: false,
-        renderCell: (params) => {
-            const state = params.row['@state'];
-            if (state === 'unpaid') {
-                return (
-                    <Button 
-                        variant="contained" 
-                        size="small"
-                        color="primary"
-                        onClick={() => console.log('Pay IOU:', params.row['@id'])}
-                    >
-                        Pay
-                    </Button>
-                );
-            }
-            return null;
-        }
-    }
-];
-
 export default function IOUTable() {
+    const { tokenParsed, getToken } = useAuth();
     const [ious, setIous] = useState<IOU[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [showDebug, setShowDebug] = useState(false);
     const [rawData, setRawData] = useState<any>(null);
+    
+    // Payment dialog state
+    const [payDialogOpen, setPayDialogOpen] = useState(false);
+    const [selectedIou, setSelectedIou] = useState<IOU | null>(null);
+    const [paymentAmount, setPaymentAmount] = useState('');
+    const [paymentProcessing, setPaymentProcessing] = useState(false);
+    const [paymentError, setPaymentError] = useState<string | null>(null);
+    
+    // Forgive dialog state
+    const [forgiveDialogOpen, setForgiveDialogOpen] = useState(false);
+    const [forgiveProcessing, setForgiveProcessing] = useState(false);
+    const [forgiveError, setForgiveError] = useState<string | null>(null);
+
+    // Create IOU dialog state
+    const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
     const loadIOUs = async () => {
         try {
@@ -186,7 +88,8 @@ export default function IOUTable() {
                     '\n - Issuer:', firstItem.issuerEmail,
                     '\n - Recipient:', firstItem.recipientEmail,
                     '\n - Created:', firstItem.createdAt, 
-                    '\n - Updated:', firstItem.updatedAt);
+                    '\n - Updated:', firstItem.updatedAt,
+                    '\n - Actions:', firstItem['@actions']);
                 
                 // Make sure data is in the right format for the DataGrid
                 setIous(data);
@@ -206,27 +109,281 @@ export default function IOUTable() {
         loadIOUs();
     }, []);
 
-    const handleCreateIOU = async () => {
-        try {
-            const userEmail = localStorage.getItem('userEmail') || 'alice@tech.nd';
-            
-            // Generate a random amount between 50 and 1000
-            const amount = Math.floor(Math.random() * 950) + 50;
-            
-            // Choose random recipient (bob or charlie)
-            const recipients = ['bob@tech.nd', 'charlie@tech.nd', 'dave@tech.nd'];
-            const recipient = recipients[Math.floor(Math.random() * recipients.length)];
-            
-            console.log(`Creating new IOU: ${userEmail} owes ${recipient} $${amount}`);
-            
-            const response = await createIOU(recipient, amount);
-            console.log('Created IOU:', response);
-            loadIOUs(); // Reload the table
-        } catch (error) {
-            console.error('Error creating IOU:', error);
-            setError(error instanceof Error ? error.message : 'Failed to create IOU');
+    // Check if the current user is the issuer of the IOU
+    const userIsIssuer = (iou: IOU) => {
+        const userEmail = tokenParsed?.email;
+        return userEmail && iou.issuerEmail.toLowerCase() === userEmail.toLowerCase();
+    };
+
+    // Check if the current user is the payee of the IOU
+    const userIsPayee = (iou: IOU) => {
+        const userEmail = tokenParsed?.email;
+        return userEmail && iou.recipientEmail.toLowerCase() === userEmail.toLowerCase();
+    };
+
+    // Check if Pay action is available for this IOU
+    const canPayIOU = (iou: IOU) => {
+        // User must be the issuer and the IOU must be unpaid
+        return (
+            userIsIssuer(iou) && 
+            iou['@state'] === 'unpaid' && 
+            (typeof iou['@actions'] === 'object' && 'pay' in iou['@actions'])
+        );
+    };
+
+    // Check if Forgive action is available for this IOU
+    const canForgiveIOU = (iou: IOU) => {
+        // User must be the payee and the IOU must be unpaid
+        return (
+            userIsPayee(iou) && 
+            iou['@state'] === 'unpaid' && 
+            (typeof iou['@actions'] === 'object' && 'forgive' in iou['@actions'])
+        );
+    };
+
+    const handleCreateIOU = () => {
+        setCreateDialogOpen(true);
+    };
+
+    const handleCreateIOUClose = () => {
+        setCreateDialogOpen(false);
+    };
+
+    const handleIOUCreated = () => {
+        loadIOUs();
+        setCreateDialogOpen(false);
+    };
+
+    // Open pay dialog
+    const handlePayClick = (iou: IOU) => {
+        setSelectedIou(iou);
+        setPaymentAmount(iou.forAmount.toString());
+        setPaymentError(null);
+        setPayDialogOpen(true);
+    };
+
+    // Handle payment amount input change
+    const handlePaymentAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        // Only allow numeric input with one decimal point
+        if (value === '' || /^\d*\.?\d*$/.test(value)) {
+            setPaymentAmount(value);
         }
     };
+
+    // Submit payment
+    const handlePaymentSubmit = async () => {
+        if (!selectedIou) return;
+        
+        // Validate payment amount
+        const amount = parseFloat(paymentAmount);
+        if (isNaN(amount) || amount <= 0) {
+            setPaymentError('Please enter a valid amount greater than 0');
+            return;
+        }
+        
+        setPaymentProcessing(true);
+        setPaymentError(null);
+        
+        try {
+            // Call the pay API
+            await payIOU(selectedIou['@id'], amount);
+            
+            // Refresh IOUs after successful payment
+            await loadIOUs();
+            
+            // Close dialog
+            setPayDialogOpen(false);
+            setSelectedIou(null);
+            setPaymentAmount('');
+        } catch (error: any) {
+            console.error('Error processing payment:', error);
+            setPaymentError(error.message || 'Failed to process payment');
+        } finally {
+            setPaymentProcessing(false);
+        }
+    };
+
+    // Open forgive dialog
+    const handleForgiveClick = (iou: IOU) => {
+        setSelectedIou(iou);
+        setForgiveError(null);
+        setForgiveDialogOpen(true);
+    };
+
+    // Submit forgiveness
+    const handleForgiveSubmit = async () => {
+        if (!selectedIou) return;
+        
+        setForgiveProcessing(true);
+        setForgiveError(null);
+        
+        try {
+            const token = await getToken();
+            const iouId = selectedIou['@id'];
+            
+            // Use the action URL if available
+            let forgiveUrl;
+            if (typeof selectedIou['@actions'] === 'object' && 'forgive' in selectedIou['@actions']) {
+                const actionUrl = (selectedIou['@actions'] as { [key: string]: string })['forgive'];
+                
+                if (actionUrl) {
+                    // If it's a full URL, extract just the path
+                    if (actionUrl.startsWith('http')) {
+                        try {
+                            const urlObj = new URL(actionUrl);
+                            forgiveUrl = urlObj.pathname;
+                        } catch (e) {
+                            forgiveUrl = actionUrl;
+                        }
+                    } else {
+                        // It's already a path
+                        forgiveUrl = actionUrl;
+                    }
+                }
+            }
+            
+            // Default forgive URL as fallback
+            if (!forgiveUrl) {
+                forgiveUrl = `/npl/objects/iou/Iou/${iouId}/forgive`;
+            }
+            
+            try {
+                // First try a POST request
+                await api.post(forgiveUrl, {}, {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                });
+            } catch (error: any) {
+                // If we get a 405 Method Not Allowed, try a GET request
+                if (error.response && error.response.status === 405) {
+                    await api.get(forgiveUrl, {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        }
+                    });
+                } else {
+                    // Other error, rethrow it
+                    throw error;
+                }
+            }
+            
+            // Refresh IOUs after successful forgiveness
+            await loadIOUs();
+            
+            // Close dialog
+            setForgiveDialogOpen(false);
+            setSelectedIou(null);
+        } catch (error: any) {
+            console.error('Error forgiving IOU:', error);
+            setForgiveError(error.message || 'Failed to forgive IOU');
+        } finally {
+            setForgiveProcessing(false);
+        }
+    };
+
+    const columns: GridColDef[] = [
+        { 
+            field: '@id', 
+            headerName: 'ID', 
+            width: 200,
+            renderCell: (params) => {
+                const id = params.row['@id'] || '';
+                return <Typography>{id.substring(0, 8)}...</Typography>;
+            }
+        },
+        { 
+            field: 'issuerEmail', 
+            headerName: 'Issuer', 
+            width: 150,
+            renderCell: (params) => {
+                return <Typography>{params.row.issuerEmail || 'Unknown'}</Typography>;
+            }
+        },
+        { 
+            field: 'recipientEmail', 
+            headerName: 'Recipient', 
+            width: 150,
+            renderCell: (params) => {
+                return <Typography>{params.row.recipientEmail || 'Unknown'}</Typography>;
+            }
+        },
+        {
+            field: 'forAmount',
+            headerName: 'Amount',
+            type: 'number',
+            width: 130,
+            renderCell: (params) => {
+                const amount = Number(params.row.forAmount) || 0;
+                return (
+                    <Typography>
+                        {formatCurrency(amount)}
+                    </Typography>
+                );
+            }
+        },
+        {
+            field: '@state',
+            headerName: 'Status',
+            width: 130,
+            renderCell: (params) => {
+                const status = params.row['@state'] || 'unknown';
+                const colorMap: Record<string, string> = {
+                    'unpaid': 'warning.main',
+                    'paid': 'success.main',
+                    'rejected': 'error.main',
+                    'accepted': 'info.main',
+                    'forgiven': 'info.main',
+                };
+                return (
+                    <Typography
+                        sx={{
+                            color: colorMap[status] || 'text.primary',
+                        }}
+                    >
+                        {status.toUpperCase()}
+                    </Typography>
+                );
+            },
+        },
+        {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 200,
+            sortable: false,
+            filterable: false,
+            renderCell: (params) => {
+                const iou = params.row as IOU;
+                
+                return (
+                    <Stack direction="row" spacing={1}>
+                        {canPayIOU(iou) && (
+                            <Button 
+                                variant="contained" 
+                                size="small"
+                                color="primary"
+                                onClick={() => handlePayClick(iou)}
+                            >
+                                Pay
+                            </Button>
+                        )}
+                        
+                        {canForgiveIOU(iou) && (
+                            <Button 
+                                variant="contained" 
+                                size="small"
+                                color="secondary"
+                                onClick={() => handleForgiveClick(iou)}
+                            >
+                                Forgive
+                            </Button>
+                        )}
+                    </Stack>
+                );
+            }
+        }
+    ];
 
     if (error) {
         return (
@@ -294,6 +451,101 @@ export default function IOUTable() {
                 autoHeight
                 getRowId={(row) => row['@id']}
             />
+
+            {/* Payment Dialog */}
+            <Dialog open={payDialogOpen} onClose={() => setPayDialogOpen(false)}>
+                <DialogTitle>Make Payment</DialogTitle>
+                <DialogContent>
+                    {selectedIou && (
+                        <>
+                            <Typography paragraph>
+                                You owe {formatCurrency(selectedIou.forAmount)} to {selectedIou.recipientEmail}.
+                            </Typography>
+                            <TextField
+                                label="Payment Amount"
+                                type="text"
+                                fullWidth
+                                margin="normal"
+                                variant="outlined"
+                                value={paymentAmount}
+                                onChange={handlePaymentAmountChange}
+                                disabled={paymentProcessing}
+                                InputProps={{
+                                    startAdornment: <span style={{ marginRight: 8 }}>$</span>,
+                                }}
+                                helperText="Enter the amount you want to pay"
+                                error={!!paymentError}
+                            />
+                        </>
+                    )}
+                    {paymentError && (
+                        <Typography color="error" sx={{ mt: 2 }}>
+                            {paymentError}
+                        </Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPayDialogOpen(false)} disabled={paymentProcessing}>
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={handlePaymentSubmit} 
+                        color="primary" 
+                        disabled={paymentProcessing || !paymentAmount}
+                        startIcon={paymentProcessing ? <CircularProgress size={20} /> : null}
+                    >
+                        {paymentProcessing ? 'Processing...' : 'Pay'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Forgive Dialog */}
+            <Dialog open={forgiveDialogOpen} onClose={() => setForgiveDialogOpen(false)}>
+                <DialogTitle>Confirm Forgiveness</DialogTitle>
+                <DialogContent>
+                    {selectedIou && (
+                        <Typography>
+                            Are you sure you want to forgive the IOU of {formatCurrency(selectedIou.forAmount)} from {selectedIou.issuerEmail}?
+                        </Typography>
+                    )}
+                    {forgiveError && (
+                        <Typography color="error" sx={{ mt: 2 }}>
+                            {forgiveError}
+                        </Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setForgiveDialogOpen(false)} disabled={forgiveProcessing}>
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={handleForgiveSubmit} 
+                        color="primary" 
+                        disabled={forgiveProcessing}
+                        startIcon={forgiveProcessing ? <CircularProgress size={20} /> : null}
+                    >
+                        {forgiveProcessing ? 'Forgiving...' : 'Forgive'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Create IOU Dialog */}
+            <Dialog 
+                open={createDialogOpen} 
+                onClose={handleCreateIOUClose}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>Create New IOU</DialogTitle>
+                <DialogContent>
+                    <CreateIOUForm onIOUCreated={handleIOUCreated} />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCreateIOUClose}>
+                        Cancel
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }

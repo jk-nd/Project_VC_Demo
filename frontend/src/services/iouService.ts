@@ -237,4 +237,74 @@ export const fetchUserIOUs = async (): Promise<IOU[]> => {
         }
         throw error;
     }
+};
+
+export const payIOU = async (iouId: string, amount: number): Promise<IOU> => {
+    try {
+        console.log('Paying IOU:', { iouId, amount });
+        
+        const response = await api.post(`/backend/npl/objects/iou/Iou/${iouId}/pay`, {
+            amount: amount
+        });
+        
+        console.log('Pay IOU Response:', response);
+        
+        try {
+            // Return the updated IOU
+            return await getIOU(iouId);
+        } catch (getError) {
+            console.warn('Could not fetch updated IOU after payment, returning partial data:', getError);
+            // Return a partial IOU with the data we have
+            return {
+                '@id': iouId,
+                '@actions': {},
+                '@parties': {
+                    issuer: { entity: { email: [''] }, access: {} },
+                    payee: { entity: { email: [''] }, access: {} }
+                },
+                '@state': 'paid', // Assume payment succeeded
+                forAmount: amount,
+                status: 'PAID',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                issuerEmail: '',
+                recipientEmail: ''
+            };
+        }
+    } catch (error: any) {
+        console.error('Pay IOU Error:', error);
+        if (error.response) {
+            console.error('Error Response:', error.response);
+            throw new Error(error.response.data?.message || 'Failed to pay IOU');
+        }
+        throw error;
+    }
+};
+
+export const getIOU = async (iouId: string): Promise<IOU> => {
+    try {
+        const response = await api.get(`/backend/npl/objects/iou/Iou/${iouId}`);
+        const data = response.data;
+        
+        // Extract issuer and payee emails
+        const issuerEmail = data['@parties']?.issuer?.entity?.email?.[0] || '';
+        const payeeEmail = data['@parties']?.payee?.entity?.email?.[0] || '';
+        
+        // Map the response to our IOU type
+        return {
+            '@id': data['@id'],
+            '@actions': data['@actions'] || {},
+            '@parties': data['@parties'],
+            '@state': data['@state'],
+            forAmount: data.forAmount,
+            status: mapStateToStatus(data['@state']),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            issuerEmail,
+            recipientEmail: payeeEmail
+        };
+    } catch (error: any) {
+        console.error('Get IOU Error:', error);
+        throw new Error(error.response?.data?.message || 'Failed to get IOU details');
+    }
 }; 

@@ -5,10 +5,14 @@ import ListIcon from '@mui/icons-material/List';
 import AddIcon from '@mui/icons-material/Add';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import CancelIcon from '@mui/icons-material/Cancel';
+import PaymentIcon from '@mui/icons-material/Payment';
 import { useAuth } from '../../auth/KeycloakContext';
 import { Navigate } from 'react-router-dom';
 import IOUTable from '../iou/IOUTable';
 import CreateIOUForm from '../iou/CreateIOUForm';
+import ForgiveIOUScreen from '../iou/ForgiveIOUScreen';
+import PayIOUScreen from '../iou/PayIOUScreen';
 
 const drawerWidth = 240;
 const collapsedDrawerWidth = 73;
@@ -34,6 +38,8 @@ export default function MainLayout() {
     const menuItems = [
         { text: 'Overview', icon: <ListIcon />, path: 'overview' },
         { text: 'Create IOU', icon: <AddIcon />, path: 'create' },
+        { text: 'Pay IOU', icon: <PaymentIcon />, path: 'pay' },
+        { text: 'Forgive IOU', icon: <CancelIcon />, path: 'forgive' },
     ];
 
     const handleDrawerToggle = () => {
@@ -258,12 +264,21 @@ export default function MainLayout() {
                     {selectedItem === 'create' && (
                         <Paper sx={{ p: 3 }}>
                             <Typography variant="h5" gutterBottom>
-                                Create New IOU
-                            </Typography>
-                            <Typography variant="body1" paragraph>
-                                Issue a new IOU to another user in the system.
+                                Create a New IOU
                             </Typography>
                             <CreateIOUForm />
+                        </Paper>
+                    )}
+
+                    {selectedItem === 'pay' && (
+                        <Paper sx={{ p: 3 }}>
+                            <PayIOUScreen />
+                        </Paper>
+                    )}
+
+                    {selectedItem === 'forgive' && (
+                        <Paper sx={{ p: 3 }}>
+                            <ForgiveIOUScreen />
                         </Paper>
                     )}
                 </Box>

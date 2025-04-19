@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { Box, TextField, Button, Alert, Autocomplete } from '@mui/material';
 import { createIOU } from '../../services/iouService';
 import { getUserSuggestions, User } from '../../services/userService';
+import { useNavigate } from 'react-router-dom';
 
 export default function CreateIOUForm({ onIOUCreated }: { onIOUCreated?: () => void }) {
+    const navigate = useNavigate();
     const [payeeEmail, setPayeeEmail] = useState('');
     const [amount, setAmount] = useState('');
     const [error, setError] = useState('');
@@ -42,6 +44,24 @@ export default function CreateIOUForm({ onIOUCreated }: { onIOUCreated?: () => v
         fetchFilteredUsers();
     }, [searchTerm]);
 
+    // Effect to handle successful IOU creation
+    useEffect(() => {
+        if (success) {
+            // After 1.5 seconds of showing success message, either:
+            // 1. Call the callback function (if in a dialog)
+            // 2. Navigate to overview (if standalone)
+            const timer = setTimeout(() => {
+                if (onIOUCreated) {
+                    onIOUCreated();
+                } else {
+                    navigate('/');
+                }
+            }, 1500);
+            
+            return () => clearTimeout(timer);
+        }
+    }, [success, onIOUCreated, navigate]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -64,11 +84,15 @@ export default function CreateIOUForm({ onIOUCreated }: { onIOUCreated?: () => v
 
             await createIOU(payeeEmail, amountNumber);
             setSuccess('IOU created successfully!');
+            
+            // Reset form values
             setPayeeEmail('');
             setAmount('');
-            // Refresh the IOU list
+            setSearchTerm('');
+            
+            // Refresh the IOU list if callback provided
             if (onIOUCreated) {
-                onIOUCreated();
+                // Will be called after timeout in useEffect
             }
         } catch (err: any) {
             setError(err.message || 'Failed to create IOU');

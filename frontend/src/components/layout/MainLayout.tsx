@@ -241,7 +241,7 @@ export default function MainLayout() {
                     {selectedItem === 'overview' && (
                         <Paper sx={{ p: 3 }}>
                             <Typography variant="h5" gutterBottom>
-                                Search
+                                View My IOUs
                             </Typography>
                             <Accordion 
                                 expanded={expanded}
@@ -252,7 +252,7 @@ export default function MainLayout() {
                                     aria-controls="ious-content"
                                     id="ious-header"
                                 >
-                                    <Typography>Search</Typography>
+                                    <Typography>Overview</Typography>
                                 </AccordionSummary>
                                 <AccordionDetails>
                                     {expanded && <IOUTable />}

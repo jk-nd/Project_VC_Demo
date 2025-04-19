@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Button, Typography, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress, TextField } from '@mui/material';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Box, Button, Typography, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress, TextField, Paper, InputAdornment } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import api from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { useAuth } from '../../auth/KeycloakContext';
+import SearchIcon from '@mui/icons-material/Search';
+import Autocomplete from '@mui/material/Autocomplete';
 
 // Define the structure of an IOU as it comes from the API
 interface IOUResponse {
@@ -33,6 +35,8 @@ interface IOUResponse {
 const PayIOUScreen: React.FC = () => {
   const { tokenParsed, getToken } = useAuth();
   const [transformedIous, setTransformedIous] = useState<any[]>([]);
+  const [filteredIous, setFilteredIous] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIou, setSelectedIou] = useState<IOUResponse | null>(null);
@@ -249,6 +253,46 @@ const PayIOUScreen: React.FC = () => {
     }
   };
 
+  // Set filteredIous to match transformedIous when they change
+  useEffect(() => {
+    setFilteredIous(transformedIous);
+  }, [transformedIous]);
+
+  // Filter IOUs based on search term
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredIous(transformedIous);
+      return;
+    }
+
+    const searchValue = searchTerm.toLowerCase();
+    
+    const filtered = transformedIous.filter(iou => {
+      return (
+        (iou.payee && iou.payee.toLowerCase().includes(searchValue)) ||
+        (iou.amount && iou.amount.toString().includes(searchValue)) ||
+        (iou.amountOwed && iou.amountOwed.toString().includes(searchValue)) ||
+        (iou.protocolId && iou.protocolId.toLowerCase().includes(searchValue)) ||
+        (iou.state && iou.state.toLowerCase().includes(searchValue))
+      );
+    });
+    
+    setFilteredIous(filtered);
+  }, [searchTerm, transformedIous]);
+
+  // Generate search suggestions
+  const searchSuggestions = useMemo(() => {
+    const suggestions = new Set<string>();
+    
+    transformedIous.forEach(iou => {
+      if (iou.payee) suggestions.add(iou.payee);
+      if (iou.state) suggestions.add(iou.state);
+      if (iou.protocolId) suggestions.add(iou.protocolId.substring(0, 8));
+    });
+    
+    return Array.from(suggestions);
+  }, [transformedIous]);
+
   const handlePayClick = (iou: any) => {
     // If we get passed a transformed object, extract the original IOU
     const originalIou = iou.originalIou || iou;
@@ -451,6 +495,52 @@ const PayIOUScreen: React.FC = () => {
         </Button>
       </Box>
 
+      {/* Search Bar */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="subtitle1" gutterBottom>
+          Search IOUs
+        </Typography>
+        <Autocomplete
+          freeSolo
+          options={searchSuggestions}
+          inputValue={searchTerm}
+          onInputChange={(_, newValue) => setSearchTerm(newValue || '')}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              variant="outlined"
+              placeholder="Search by recipient, amount, protocol ID, or state..."
+              fullWidth
+              InputProps={{
+                ...params.InputProps,
+                startAdornment: (
+                  <>
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                    {params.InputProps.startAdornment}
+                  </>
+                )
+              }}
+            />
+          )}
+        />
+        {searchTerm && (
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              {filteredIous.length} {filteredIous.length === 1 ? 'result' : 'results'} found
+            </Typography>
+            <Button 
+              size="small" 
+              onClick={() => setSearchTerm('')}
+              sx={{ textTransform: 'none' }}
+            >
+              Clear search
+            </Button>
+          </Box>
+        )}
+      </Paper>
+
       <Box sx={{ flexGrow: 1 }}>
         {/* Debug info for the first row - only shown when debug is enabled */}
         {showDebug && transformedIous.length > 0 && (
@@ -463,7 +553,7 @@ const PayIOUScreen: React.FC = () => {
         )}
         
         <DataGrid
-          rows={transformedIous}
+          rows={filteredIous}
           columns={columns}
           loading={loading}
           getRowId={(row) => row.id}

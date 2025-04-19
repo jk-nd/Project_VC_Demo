@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     DataGrid, 
     GridColDef
 } from '@mui/x-data-grid';
 import { Box, Typography, Paper, Button, Stack, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress, InputAdornment, Chip } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import CloseIcon from '@mui/icons-material/Close';
 import Autocomplete from '@mui/material/Autocomplete';
 import { IOU } from '../../types/IOU';
 import { fetchUserIOUs, payIOU } from '../../services/iouService';
@@ -25,6 +26,7 @@ export default function IOUTable() {
     const [ious, setIous] = useState<IOU[]>([]);
     const [filteredIous, setFilteredIous] = useState<IOU[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerms, setSearchTerms] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [showDebug, setShowDebug] = useState(false);
@@ -48,190 +50,221 @@ export default function IOUTable() {
     // Create IOU dialog state
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-        const loadIOUs = async () => {
+    const searchInputRef = useRef<HTMLInputElement>(null);
+
+    const loadIOUs = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+        
+        console.log('IOUTable: Loading IOUs...');
+            const data = await fetchUserIOUs();
+        
+        console.log('IOUTable: Received data from service:', 
+                    JSON.stringify(data, null, 2));
+        
+        // Store raw data for debugging
+        setRawData(data);
+        
+        if (Array.isArray(data) && data.length > 0) {
+            // Debug first item to see structure
+            const firstItem = data[0];
+            console.log('First IOU details:',
+                '\n - ID:', firstItem['@id'],
+                '\n - Amount:', firstItem.forAmount,
+                '\n - Issuer:', firstItem.issuerEmail,
+                '\n - Recipient:', firstItem.recipientEmail,
+                '\n - Created:', firstItem.createdAt, 
+                '\n - Updated:', firstItem.updatedAt,
+                '\n - Actions:', firstItem['@actions']);
+            
+            // Make sure data is in the right format for the DataGrid
+            setIous(data);
+            setFilteredIous(data);
+
+            // Transform the IOUs to include amountOwed
             try {
-                setLoading(true);
-                setError(null);
-            
-            console.log('IOUTable: Loading IOUs...');
-                const data = await fetchUserIOUs();
-            
-            console.log('IOUTable: Received data from service:', 
-                        JSON.stringify(data, null, 2));
-            
-            // Store raw data for debugging
-            setRawData(data);
-            
-            if (Array.isArray(data) && data.length > 0) {
-                // Debug first item to see structure
-                const firstItem = data[0];
-                console.log('First IOU details:',
-                    '\n - ID:', firstItem['@id'],
-                    '\n - Amount:', firstItem.forAmount,
-                    '\n - Issuer:', firstItem.issuerEmail,
-                    '\n - Recipient:', firstItem.recipientEmail,
-                    '\n - Created:', firstItem.createdAt, 
-                    '\n - Updated:', firstItem.updatedAt,
-                    '\n - Actions:', firstItem['@actions']);
-                
-                // Make sure data is in the right format for the DataGrid
-                setIous(data);
-                setFilteredIous(data);
+                const token = await getToken();
+                const transformedIouPromises = data.map(async (iou) => {
+                    let amountOwed = iou.forAmount; // Default to total amount
 
-                // Transform the IOUs to include amountOwed
-                try {
-                    const token = await getToken();
-                    const transformedIouPromises = data.map(async (iou) => {
-                        let amountOwed = iou.forAmount; // Default to total amount
-
-                        try {
-                            if (typeof iou['@actions'] === 'object' && 'getAmountOwed' in iou['@actions']) {
-                                const getAmountOwedUrl = (iou['@actions'] as { [key: string]: string })['getAmountOwed'];
-                                if (getAmountOwedUrl) {
-                                    console.log(`Fetching amount owed for IOU ${iou['@id']} from: ${getAmountOwedUrl}`);
-                                    // Extract path if it's a full URL
-                                    let amountOwedPath = getAmountOwedUrl;
-                                    if (getAmountOwedUrl.startsWith('http')) {
-                                        try {
-                                            const urlObj = new URL(getAmountOwedUrl);
-                                            amountOwedPath = urlObj.pathname;
-                                        } catch (e) {
-                                            console.error('Failed to parse URL, using as-is:', getAmountOwedUrl);
-                                        }
-                                    }
-                                    
+                    try {
+                        if (typeof iou['@actions'] === 'object' && 'getAmountOwed' in iou['@actions']) {
+                            const getAmountOwedUrl = (iou['@actions'] as { [key: string]: string })['getAmountOwed'];
+                            if (getAmountOwedUrl) {
+                                console.log(`Fetching amount owed for IOU ${iou['@id']} from: ${getAmountOwedUrl}`);
+                                // Extract path if it's a full URL
+                                let amountOwedPath = getAmountOwedUrl;
+                                if (getAmountOwedUrl.startsWith('http')) {
                                     try {
-                                        // Try POST request first
-                                        const amountOwedResponse = await api.post(amountOwedPath, {}, {
-                                            headers: {
-                                                Authorization: `Bearer ${token}`
-                                            }
-                                        });
-                                        console.log(`Amount owed response for ${iou['@id']}:`, amountOwedResponse.data);
-                                        
-                                        if (typeof amountOwedResponse.data === 'number') {
-                                            amountOwed = amountOwedResponse.data;
+                                        const urlObj = new URL(getAmountOwedUrl);
+                                        amountOwedPath = urlObj.pathname;
+                                    } catch (e) {
+                                        console.error('Failed to parse URL, using as-is:', getAmountOwedUrl);
+                                    }
+                                }
+                                
+                                try {
+                                    // Try POST request first
+                                    const amountOwedResponse = await api.post(amountOwedPath, {}, {
+                                        headers: {
+                                            Authorization: `Bearer ${token}`
                                         }
-                                    } catch (error: any) {
-                                        console.error(`Error fetching amount owed for IOU ${iou['@id']}:`, error);
-                                        if (error.response && error.response.status === 405) {
-                                            console.log('Received Method Not Allowed error, trying GET request instead');
-                                            try {
-                                                const getResponse = await api.get(amountOwedPath, {
-                                                    headers: {
-                                                        Authorization: `Bearer ${token}`
-                                                    }
-                                                });
-                                                console.log(`GET Amount owed response for ${iou['@id']}:`, getResponse.data);
-                                                
-                                                if (typeof getResponse.data === 'number') {
-                                                    amountOwed = getResponse.data;
+                                    });
+                                    console.log(`Amount owed response for ${iou['@id']}:`, amountOwedResponse.data);
+                                    
+                                    if (typeof amountOwedResponse.data === 'number') {
+                                        amountOwed = amountOwedResponse.data;
+                                    }
+                                } catch (error: any) {
+                                    console.error(`Error fetching amount owed for IOU ${iou['@id']}:`, error);
+                                    if (error.response && error.response.status === 405) {
+                                        console.log('Received Method Not Allowed error, trying GET request instead');
+                                        try {
+                                            const getResponse = await api.get(amountOwedPath, {
+                                                headers: {
+                                                    Authorization: `Bearer ${token}`
                                                 }
-                                            } catch (getError) {
-                                                console.error(`GET request for amount owed also failed for IOU ${iou['@id']}:`, getError);
-                                                // Use default amount
+                                            });
+                                            console.log(`GET Amount owed response for ${iou['@id']}:`, getResponse.data);
+                                            
+                                            if (typeof getResponse.data === 'number') {
+                                                amountOwed = getResponse.data;
                                             }
+                                        } catch (getError) {
+                                            console.error(`GET request for amount owed also failed for IOU ${iou['@id']}:`, getError);
+                                            // Use default amount
                                         }
                                     }
                                 }
                             }
-                        } catch (error) {
-                            console.error(`Error processing IOU ${iou['@id']}:`, error);
-                            // Use default amount
                         }
-                        
-                        return {
-                            ...iou,
-                            amountOwed
-                        };
-                    });
+                    } catch (error) {
+                        console.error(`Error processing IOU ${iou['@id']}:`, error);
+                        // Use default amount
+                    }
                     
-                    // Wait for all the amountOwed API calls to complete
-                    const transformed = await Promise.all(transformedIouPromises);
-                    console.log('Transformed IOUs with amount owed:', transformed);
-                    setTransformedIous(transformed);
-                } catch (transformError) {
-                    console.error('Error transforming IOUs with amount owed:', transformError);
-                    // Still set the transformed IOUs with default values
-                    setTransformedIous(data.map(iou => ({
+                    return {
                         ...iou,
-                        amountOwed: iou.forAmount
-                    })));
-                }
-            } else {
-                console.log('No IOUs found or data is not an array');
-                setIous([]);
-                setFilteredIous([]);
-                setTransformedIous([]);
+                        amountOwed
+                    };
+                });
+                
+                // Wait for all the amountOwed API calls to complete
+                const transformed = await Promise.all(transformedIouPromises);
+                console.log('Transformed IOUs with amount owed:', transformed);
+                setTransformedIous(transformed);
+            } catch (transformError) {
+                console.error('Error transforming IOUs with amount owed:', transformError);
+                // Still set the transformed IOUs with default values
+                setTransformedIous(data.map(iou => ({
+                    ...iou,
+                    amountOwed: iou.forAmount
+                })));
             }
-            } catch (err) {
-            console.error('Error loading IOUs:', err);
-                setError(err instanceof Error ? err.message : 'Failed to load IOUs');
-            // Clear any partial data
+        } else {
+            console.log('No IOUs found or data is not an array');
             setIous([]);
             setFilteredIous([]);
             setTransformedIous([]);
-            } finally {
-                setLoading(false);
-            }
-        };
+        }
+        } catch (err) {
+        console.error('Error loading IOUs:', err);
+            setError(err instanceof Error ? err.message : 'Failed to load IOUs');
+        // Clear any partial data
+        setIous([]);
+        setFilteredIous([]);
+        setTransformedIous([]);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
         loadIOUs();
     }, []);
 
-    // Filter IOUs based on search term
+    // Filter IOUs based on multiple search terms
     useEffect(() => {
-        if (!searchTerm.trim()) {
+        if (searchTerms.length === 0) {
             setFilteredIous(ious);
             return;
         }
 
-        // Check if search term has a type prefix (like "issuer:" or "state:")
-        let searchType = '';
-        let searchValue = searchTerm.toLowerCase();
-        
-        if (searchTerm.includes(':')) {
-            const [type, value] = searchTerm.split(':');
-            searchType = type.toLowerCase();
-            searchValue = value.toLowerCase();
-        }
-        
         const filtered = ious.filter(iou => {
-            // If we have a type prefix, filter by that specific field
-            if (searchType) {
-                switch (searchType) {
-                    case 'issuer':
-                        return iou.issuerEmail && iou.issuerEmail.toLowerCase().includes(searchValue);
-                    case 'payee':
-                        return iou.recipientEmail && iou.recipientEmail.toLowerCase().includes(searchValue);
-                    case 'state':
-                        return iou['@state'] && iou['@state'].toLowerCase().includes(searchValue);
-                    case 'id':
-                        return iou['@id'] && iou['@id'].toLowerCase().includes(searchValue);
-                    case 'amount':
-                        return iou.forAmount && iou.forAmount.toString().includes(searchValue);
-                    case 'owed':
-                        // For amount owed, we need to check in the transformedIous array
-                        const transformedIou = transformedIous.find(item => item['@id'] === iou['@id']);
-                        return transformedIou && transformedIou.amountOwed && 
-                               transformedIou.amountOwed.toString().includes(searchValue);
-                    default:
-                        return false;
+            // The IOU must match ALL search terms to be included
+            return searchTerms.every(term => {
+                // Check if search term has a type prefix (like "issuer:" or "state:")
+                let searchType = '';
+                let searchValue = term.toLowerCase();
+                
+                if (term.includes(':')) {
+                    const [type, value] = term.split(':');
+                    searchType = type.toLowerCase();
+                    searchValue = value.toLowerCase();
                 }
-            }
-            
-            // If no type prefix, search across all fields
-            return (
-                (iou.issuerEmail && iou.issuerEmail.toLowerCase().includes(searchValue)) ||
-                (iou.recipientEmail && iou.recipientEmail.toLowerCase().includes(searchValue)) ||
-                (iou['@state'] && iou['@state'].toLowerCase().includes(searchValue)) ||
-                (iou['@id'] && iou['@id'].toLowerCase().includes(searchValue)) ||
-                (iou.forAmount && iou.forAmount.toString().includes(searchValue))
-            );
+                
+                // If we have a type prefix, filter by that specific field
+                if (searchType) {
+                    switch (searchType) {
+                        case 'issuer':
+                            return iou.issuerEmail && iou.issuerEmail.toLowerCase().includes(searchValue);
+                        case 'payee':
+                            return iou.recipientEmail && iou.recipientEmail.toLowerCase().includes(searchValue);
+                        case 'state':
+                            return iou['@state'] && iou['@state'].toLowerCase().includes(searchValue);
+                        case 'id':
+                            return iou['@id'] && iou['@id'].toLowerCase().includes(searchValue);
+                        case 'amount':
+                            return iou.forAmount && iou.forAmount.toString().includes(searchValue);
+                        case 'owed':
+                            // For amount owed, we need to check in the transformedIous array
+                            const transformedIou = transformedIous.find(item => item['@id'] === iou['@id']);
+                            return transformedIou && transformedIou.amountOwed && 
+                                   transformedIou.amountOwed.toString().includes(searchValue);
+                        default:
+                            return false;
+                    }
+                }
+                
+                // If no type prefix, search across all fields
+                return (
+                    (iou.issuerEmail && iou.issuerEmail.toLowerCase().includes(searchValue)) ||
+                    (iou.recipientEmail && iou.recipientEmail.toLowerCase().includes(searchValue)) ||
+                    (iou['@state'] && iou['@state'].toLowerCase().includes(searchValue)) ||
+                    (iou['@id'] && iou['@id'].toLowerCase().includes(searchValue)) ||
+                    (iou.forAmount && iou.forAmount.toString().includes(searchValue))
+                );
+            });
         });
+        
         setFilteredIous(filtered);
-    }, [searchTerm, ious, transformedIous]);
+    }, [searchTerms, ious, transformedIous]);
+
+    // Handle adding a search term
+    const handleAddSearchTerm = (term: string) => {
+        if (!term || searchTerms.includes(term)) return;
+        setSearchTerms([...searchTerms, term]);
+        setSearchTerm(''); // Clear the input after adding
+        
+        // Focus the search input after a short delay to ensure state updates have completed
+        setTimeout(() => {
+            if (searchInputRef.current) {
+                searchInputRef.current.focus();
+            }
+        }, 50);
+    };
+
+    // Handle removing a search term
+    const handleRemoveSearchTerm = (termToRemove: string) => {
+        setSearchTerms(searchTerms.filter(term => term !== termToRemove));
+    };
+
+    // Clear all search terms
+    const handleClearAllSearchTerms = () => {
+        setSearchTerms([]);
+        setSearchTerm('');
+    };
 
     // Generate search suggestions from the data
     const searchSuggestions = useMemo(() => {
@@ -591,6 +624,7 @@ export default function IOUTable() {
                     renderInput={(params) => (
                         <TextField
                             {...params}
+                            inputRef={searchInputRef}
                             variant="outlined"
                             placeholder="Search by issuer, payee, state, amount, or ID..."
                             fullWidth
@@ -605,6 +639,12 @@ export default function IOUTable() {
                                     </>
                                 )
                             }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && searchTerm) {
+                                    handleAddSearchTerm(searchTerm);
+                                    e.preventDefault();
+                                }
+                            }}
                         />
                     )}
                     renderOption={(props, option) => {
@@ -616,8 +656,11 @@ export default function IOUTable() {
                             value = option;
                         }
                         
+                        // Extract the key prop to pass it directly to the JSX element
+                        const { key, ...otherProps } = props;
+                        
                         return (
-                            <li {...props}>
+                            <li key={key} {...otherProps}>
                                 {type && (
                                     <Chip 
                                         label={type} 
@@ -633,22 +676,67 @@ export default function IOUTable() {
                     // Handle option selection
                     onChange={(_, newValue) => {
                         if (newValue && typeof newValue === 'string') {
-                            setSearchTerm(newValue);
+                            handleAddSearchTerm(newValue);
                         }
                     }}
                 />
-                {searchTerm && (
+                
+                {/* Display active search terms as chips */}
+                {searchTerms.length > 0 && (
+                    <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {searchTerms.map((term, index) => {
+                            let label = term;
+                            let color: "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" = "default";
+                            
+                            // Style chips differently based on search type
+                            if (term.includes(':')) {
+                                const [type, value] = term.split(':');
+                                switch (type.toLowerCase()) {
+                                    case 'issuer':
+                                        color = "primary";
+                                        break;
+                                    case 'payee':
+                                        color = "secondary";
+                                        break;
+                                    case 'state':
+                                        color = "info";
+                                        break;
+                                    case 'amount':
+                                    case 'owed':
+                                        color = "success";
+                                        break;
+                                    case 'id':
+                                        color = "warning";
+                                        break;
+                                }
+                            }
+                            
+                            return (
+                                <Chip
+                                    key={index}
+                                    label={label}
+                                    color={color}
+                                    onDelete={() => handleRemoveSearchTerm(term)}
+                                    size="medium"
+                                />
+                            );
+                        })}
+                        
+                        <Button 
+                            size="small" 
+                            onClick={handleClearAllSearchTerms}
+                            sx={{ ml: 1, textTransform: 'none' }}
+                        >
+                            Clear all
+                        </Button>
+                    </Box>
+                )}
+                
+                {searchTerms.length > 0 && (
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                             {filteredIous.length} {filteredIous.length === 1 ? 'result' : 'results'} found
                         </Typography>
-                        <Button 
-                            size="small" 
-                            onClick={() => setSearchTerm('')}
-                            sx={{ textTransform: 'none' }}
-                        >
-                            Clear search
-                        </Button>
                     </Box>
                 )}
             </Paper>
@@ -672,7 +760,7 @@ export default function IOUTable() {
                             {ious.length > 0 && `\nFirst IOU ID: ${ious[0]['@id']}`}
                             {ious.length > 0 && `\nFirst IOU Amount: ${ious[0].forAmount}`}
                             {`\nFiltered IOUs: ${filteredIous.length}`}
-                            {`\nSearch Term: ${searchTerm}`}
+                            {`\nSearch Terms: ${searchTerms.join(', ')}`}
                         </Box>
                     </Box>
                 </Paper>
@@ -680,7 +768,7 @@ export default function IOUTable() {
             
             <Box sx={{ height: 400, width: '100%' }}>
             <DataGrid
-                    rows={transformedIous.length > 0 ? transformedIous : filteredIous}
+                    rows={filteredIous}
                 columns={columns}
                     getRowId={(row) => row['@id']}
                 loading={loading}

@@ -252,7 +252,7 @@ export default function MainLayout() {
                                     aria-controls="ious-content"
                                     id="ious-header"
                                 >
-                                    <Typography>View My IOUs</Typography>
+                                    <Typography>Search</Typography>
                                 </AccordionSummary>
                                 <AccordionDetails>
                                     {expanded && <IOUTable />}

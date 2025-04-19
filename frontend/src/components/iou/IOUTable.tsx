@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
     DataGrid, 
     GridColDef
 } from '@mui/x-data-grid';
-import { Box, Typography, Paper, Button, Stack, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress } from '@mui/material';
+import { Box, Typography, Paper, Button, Stack, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress, InputAdornment, Chip } from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
+import Autocomplete from '@mui/material/Autocomplete';
 import { IOU } from '../../types/IOU';
 import { fetchUserIOUs, createIOU, payIOU, getIOU } from '../../services/iouService';
 import { useAuth } from '../../auth/KeycloakContext';
@@ -45,6 +47,8 @@ type GridParams = {
 export default function IOUTable() {
     const { tokenParsed, getToken } = useAuth();
     const [ious, setIous] = useState<IOU[]>([]);
+    const [filteredIous, setFilteredIous] = useState<IOU[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [showDebug, setShowDebug] = useState(false);
@@ -93,9 +97,11 @@ export default function IOUTable() {
                 
                 // Make sure data is in the right format for the DataGrid
                 setIous(data);
+                setFilteredIous(data);
             } else {
                 console.log('No IOUs found or data is not an array');
                 setIous([]);
+                setFilteredIous([]);
             }
         } catch (err) {
             console.error('Error loading IOUs:', err);
@@ -108,6 +114,70 @@ export default function IOUTable() {
     useEffect(() => {
         loadIOUs();
     }, []);
+
+    // Filter IOUs based on search term
+    useEffect(() => {
+        if (!searchTerm.trim()) {
+            setFilteredIous(ious);
+            return;
+        }
+
+        // Check if search term has a type prefix (like "issuer:" or "state:")
+        let searchType = '';
+        let searchValue = searchTerm.toLowerCase();
+        
+        if (searchTerm.includes(':')) {
+            const [type, value] = searchTerm.split(':');
+            searchType = type.toLowerCase();
+            searchValue = value.toLowerCase();
+        }
+        
+        const filtered = ious.filter(iou => {
+            // If we have a type prefix, filter by that specific field
+            if (searchType) {
+                switch (searchType) {
+                    case 'issuer':
+                        return iou.issuerEmail && iou.issuerEmail.toLowerCase().includes(searchValue);
+                    case 'payee':
+                        return iou.recipientEmail && iou.recipientEmail.toLowerCase().includes(searchValue);
+                    case 'state':
+                        return iou['@state'] && iou['@state'].toLowerCase().includes(searchValue);
+                    case 'id':
+                        return iou['@id'] && iou['@id'].toLowerCase().includes(searchValue);
+                    case 'amount':
+                        return iou.forAmount && iou.forAmount.toString().includes(searchValue);
+                    default:
+                        return false;
+                }
+            }
+            
+            // If no type prefix, search across all fields
+            return (
+                (iou.issuerEmail && iou.issuerEmail.toLowerCase().includes(searchValue)) ||
+                (iou.recipientEmail && iou.recipientEmail.toLowerCase().includes(searchValue)) ||
+                (iou['@state'] && iou['@state'].toLowerCase().includes(searchValue)) ||
+                (iou['@id'] && iou['@id'].toLowerCase().includes(searchValue)) ||
+                (iou.forAmount && iou.forAmount.toString().includes(searchValue))
+            );
+        });
+        setFilteredIous(filtered);
+    }, [searchTerm, ious]);
+
+    // Generate search suggestions from the data
+    const searchSuggestions = useMemo(() => {
+        const suggestions = new Set<string>();
+        
+        // Add all issuers, payees, states and protocol IDs to suggestions
+        ious.forEach(iou => {
+            if (iou.issuerEmail) suggestions.add(`issuer:${iou.issuerEmail}`);
+            if (iou.recipientEmail) suggestions.add(`payee:${iou.recipientEmail}`);
+            if (iou['@state']) suggestions.add(`state:${iou['@state']}`);
+            if (iou['@id']) suggestions.add(`id:${iou['@id'].substring(0, 8)}`);
+            suggestions.add(`amount:${iou.forAmount}`);
+        });
+        
+        return Array.from(suggestions);
+    }, [ious]);
 
     // Check if the current user is the issuer of the IOU
     const userIsIssuer = (iou: IOU) => {
@@ -283,6 +353,16 @@ export default function IOUTable() {
         }
     };
 
+    const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setSearchTerm(event.target.value);
+    };
+
+    const handleSearchOptionSelected = (event: React.SyntheticEvent, value: string | null) => {
+        if (value) {
+            setSearchTerm(value);
+        }
+    };
+
     const columns: GridColDef[] = [
         { 
             field: '@id', 
@@ -413,6 +493,86 @@ export default function IOUTable() {
                 </Button>
             </Stack>
             
+            {/* Search Bar */}
+            <Paper sx={{ p: 2, mb: 2 }}>
+                <Typography variant="subtitle1" gutterBottom>
+                    Search IOUs
+                </Typography>
+                <Autocomplete
+                    freeSolo
+                    options={searchSuggestions}
+                    inputValue={searchTerm}
+                    onInputChange={(event, newValue) => setSearchTerm(newValue)}
+                    renderInput={(params) => (
+                        <TextField
+                            {...params}
+                            variant="outlined"
+                            placeholder="Search by issuer, payee, state, amount, or ID..."
+                            onChange={handleSearchChange}
+                            fullWidth
+                            InputProps={{
+                                ...params.InputProps,
+                                startAdornment: (
+                                    <>
+                                        <InputAdornment position="start">
+                                            <SearchIcon />
+                                        </InputAdornment>
+                                        {params.InputProps.startAdornment}
+                                    </>
+                                )
+                            }}
+                        />
+                    )}
+                    renderOption={(props, option) => {
+                        // Parse the option to display it nicely
+                        let [type, value] = ['', ''];
+                        if (option.includes(':')) {
+                            [type, value] = option.split(':');
+                        } else {
+                            value = option;
+                        }
+                        
+                        // Extract key from props to avoid React warning
+                        const { key, ...otherProps } = props;
+                        
+                        return (
+                            <li key={key} {...otherProps}>
+                                {type && (
+                                    <Chip 
+                                        label={type} 
+                                        size="small" 
+                                        sx={{ mr: 1, textTransform: 'capitalize' }}
+                                    />
+                                )}
+                                {value}
+                            </li>
+                        );
+                    }}
+
+                    // Fix search when selecting an option
+                    onChange={(event, value) => {
+                        if (value) {
+                            setSearchTerm(value);
+                        }
+                    }}
+                />
+                {searchTerm && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                            {filteredIous.length} {filteredIous.length === 1 ? 'result' : 'results'} found
+                        </Typography>
+                        <Button 
+                            size="small" 
+                            onClick={() => setSearchTerm('')}
+                            sx={{ textTransform: 'none' }}
+                        >
+                            Clear search
+                        </Button>
+                    </Box>
+                )}
+            </Paper>
+            
+            {/* Debug Info */}
             {showDebug && (
                 <Paper sx={{ p: 2, mb: 2, overflow: 'auto', maxHeight: '300px' }}>
                     <Typography variant="h6" gutterBottom>Data Debug</Typography>
@@ -430,13 +590,15 @@ export default function IOUTable() {
                             {`ious.length: ${ious.length}`}
                             {ious.length > 0 && `\nFirst IOU ID: ${ious[0]['@id']}`}
                             {ious.length > 0 && `\nFirst IOU Amount: ${ious[0].forAmount}`}
+                            {`\nFiltered IOUs: ${filteredIous.length}`}
+                            {`\nSearch Term: ${searchTerm}`}
                         </Box>
                     </Box>
                 </Paper>
             )}
             
             <DataGrid
-                rows={ious}
+                rows={filteredIous}
                 columns={columns}
                 loading={loading}
                 pageSizeOptions={[5, 10, 25, 100]}

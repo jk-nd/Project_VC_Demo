@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { Box, Button, Typography, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress, Paper, TextField, InputAdornment } from '@mui/material';
+import { Box, Button, Typography, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress, Paper, TextField, InputAdornment, Chip } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import api from '../../services/api';
 //import { formatCurrency, formatDate } from '../../utils/formatters';
@@ -17,10 +17,12 @@ const ForgiveIOUScreen: React.FC = () => {
   const [transformedIous, setTransformedIous] = useState<any[]>([]);
   const [filteredIous, setFilteredIous] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [searchTerms, setSearchTerms] = useState<string[]>([]);
   const [selectedIou, setSelectedIou] = useState<IOU | null>(null);
   const [openConfirmDialog, setOpenConfirmDialog] = useState<boolean>(false);
   const [forgivingIou, setForgivingIou] = useState<boolean>(false);
   const [forgiveError, setForgiveError] = useState<string | null>(null);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchIOUs();
@@ -31,36 +33,99 @@ const ForgiveIOUScreen: React.FC = () => {
     setFilteredIous(transformedIous);
   }, [transformedIous]);
 
-  // Filter IOUs based on search term
+  // Filter IOUs based on multiple search terms
   useEffect(() => {
-    if (!searchTerm.trim()) {
+    if (searchTerms.length === 0) {
       setFilteredIous(transformedIous);
       return;
     }
 
-    const searchValue = searchTerm.toLowerCase();
-    
     const filtered = transformedIous.filter(iou => {
-      return (
-        (iou.issuerName && iou.issuerName.toLowerCase().includes(searchValue)) ||
-        (iou.issuerEmail && iou.issuerEmail.toLowerCase().includes(searchValue)) ||
-        (iou.amount && iou.amount.toString().includes(searchValue)) ||
-        (iou.date && iou.date.toLowerCase().includes(searchValue)) ||
-        (iou.status && iou.status.toLowerCase().includes(searchValue))
-      );
+      // The IOU must match ALL search terms to be included
+      return searchTerms.every(term => {
+        // Check if search term has a type prefix (like "issuer:" or "status:")
+        let searchType = '';
+        let searchValue = term.toLowerCase();
+        
+        if (term.includes(':')) {
+          const [type, value] = term.split(':');
+          searchType = type.toLowerCase();
+          searchValue = value.toLowerCase();
+        }
+        
+        // If we have a type prefix, filter by that specific field
+        if (searchType) {
+          switch (searchType) {
+            case 'issuer':
+            case 'from':
+              return (iou.issuerName && iou.issuerName.toLowerCase().includes(searchValue)) ||
+                     (iou.issuerEmail && iou.issuerEmail.toLowerCase().includes(searchValue));
+            case 'amount':
+              return iou.amount && iou.amount.toString().includes(searchValue);
+            case 'date':
+              return iou.date && iou.date.toLowerCase().includes(searchValue);
+            case 'status':
+            case 'state':
+              return iou.status && iou.status.toLowerCase().includes(searchValue);
+            case 'id':
+              return iou.id && iou.id.toLowerCase().includes(searchValue);
+            default:
+              return false;
+          }
+        }
+        
+        // If no type prefix, search across all fields
+        return (
+          (iou.issuerName && iou.issuerName.toLowerCase().includes(searchValue)) ||
+          (iou.issuerEmail && iou.issuerEmail.toLowerCase().includes(searchValue)) ||
+          (iou.amount && iou.amount.toString().includes(searchValue)) ||
+          (iou.date && iou.date.toLowerCase().includes(searchValue)) ||
+          (iou.status && iou.status.toLowerCase().includes(searchValue)) ||
+          (iou.id && iou.id.toLowerCase().includes(searchValue))
+        );
+      });
     });
     
     setFilteredIous(filtered);
-  }, [searchTerm, transformedIous]);
+  }, [searchTerms, transformedIous]);
 
-  // Generate search suggestions
+  // Handle adding a search term
+  const handleAddSearchTerm = (term: string) => {
+    if (!term || searchTerms.includes(term)) return;
+    setSearchTerms([...searchTerms, term]);
+    setSearchTerm(''); // Clear the input after adding
+    
+    // Focus the search input after a short delay to ensure state updates have completed
+    setTimeout(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+      }
+    }, 50);
+  };
+
+  // Handle removing a search term
+  const handleRemoveSearchTerm = (termToRemove: string) => {
+    setSearchTerms(searchTerms.filter(term => term !== termToRemove));
+  };
+
+  // Clear all search terms
+  const handleClearAllSearchTerms = () => {
+    setSearchTerms([]);
+    setSearchTerm('');
+  };
+
+  // Generate search suggestions from the data
   const searchSuggestions = useMemo(() => {
     const suggestions = new Set<string>();
     
+    // Add all issuers, dates, status and amounts to suggestions
     transformedIous.forEach(iou => {
-      if (iou.issuerName) suggestions.add(iou.issuerName);
-      if (iou.issuerEmail) suggestions.add(iou.issuerEmail);
-      if (iou.status) suggestions.add(iou.status);
+      if (iou.issuerName) suggestions.add(`issuer:${iou.issuerName}`);
+      if (iou.issuerEmail) suggestions.add(`from:${iou.issuerEmail}`);
+      if (iou.status) suggestions.add(`status:${iou.status}`);
+      if (iou.date) suggestions.add(`date:${iou.date}`);
+      if (iou.id) suggestions.add(`id:${iou.id.substring(0, 8)}`);
+      if (iou.amount) suggestions.add(`amount:${formatCurrency(iou.amount)}`);
     });
     
     return Array.from(suggestions);
@@ -292,6 +357,7 @@ const ForgiveIOUScreen: React.FC = () => {
         </Button>
       </Box>
 
+      {/* Search Bar */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Typography variant="subtitle1" gutterBottom>
           Search IOUs
@@ -304,6 +370,7 @@ const ForgiveIOUScreen: React.FC = () => {
           renderInput={(params) => (
             <TextField
               {...params}
+              inputRef={searchInputRef}
               variant="outlined"
               placeholder="Search by issuer, amount, date, or status..."
               fullWidth
@@ -318,21 +385,105 @@ const ForgiveIOUScreen: React.FC = () => {
                   </>
                 )
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchTerm) {
+                  handleAddSearchTerm(searchTerm);
+                  e.preventDefault();
+                }
+              }}
             />
           )}
+          renderOption={(props, option) => {
+            // Parse the option to display it nicely
+            let [type, value] = ['', ''];
+            if (typeof option === 'string' && option.includes(':')) {
+              [type, value] = option.split(':');
+            } else if (typeof option === 'string') {
+              value = option;
+            }
+            
+            // Extract the key prop to pass it directly to the JSX element
+            const { key, ...otherProps } = props;
+            
+            return (
+              <li key={key} {...otherProps}>
+                {type && (
+                  <Chip 
+                    label={type} 
+                    size="small" 
+                    sx={{ mr: 1, textTransform: 'capitalize' }}
+                  />
+                )}
+                {value}
+              </li>
+            );
+          }}
+          
+          // Handle option selection
+          onChange={(_, newValue) => {
+            if (newValue && typeof newValue === 'string') {
+              handleAddSearchTerm(newValue);
+            }
+          }}
         />
-        {searchTerm && (
+        
+        {/* Display active search terms as chips */}
+        {searchTerms.length > 0 && (
+          <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+            {searchTerms.map((term, index) => {
+              let label = term;
+              let color: "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" = "default";
+              
+              // Style chips differently based on search type
+              if (term.includes(':')) {
+                const type = term.split(':')[0];
+                switch (type.toLowerCase()) {
+                  case 'issuer':
+                  case 'from':
+                    color = "primary";
+                    break;
+                  case 'amount':
+                    color = "success";
+                    break;
+                  case 'date':
+                    color = "warning";
+                    break;
+                  case 'status':
+                  case 'state':
+                    color = "info";
+                    break;
+                  case 'id':
+                    color = "secondary";
+                    break;
+                }
+              }
+              
+              return (
+                <Chip
+                  key={index}
+                  label={label}
+                  color={color}
+                  onDelete={() => handleRemoveSearchTerm(term)}
+                  size="medium"
+                />
+              );
+            })}
+            
+            <Button 
+              size="small" 
+              onClick={handleClearAllSearchTerms}
+              sx={{ ml: 1, textTransform: 'none' }}
+            >
+              Clear all
+            </Button>
+          </Box>
+        )}
+        
+        {searchTerms.length > 0 && (
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               {filteredIous.length} {filteredIous.length === 1 ? 'result' : 'results'} found
             </Typography>
-            <Button 
-              size="small" 
-              onClick={() => setSearchTerm('')}
-              sx={{ textTransform: 'none' }}
-            >
-              Clear search
-            </Button>
           </Box>
         )}
       </Paper>

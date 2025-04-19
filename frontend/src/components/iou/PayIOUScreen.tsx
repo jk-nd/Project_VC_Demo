@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Box, Button, Typography, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress, TextField, Paper, InputAdornment } from '@mui/material';
+import { Box, Button, Typography, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress, TextField, Paper, InputAdornment, Chip } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import api from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
@@ -37,6 +37,7 @@ const PayIOUScreen: React.FC = () => {
   const [transformedIous, setTransformedIous] = useState<any[]>([]);
   const [filteredIous, setFilteredIous] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerms, setSearchTerms] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIou, setSelectedIou] = useState<IOUResponse | null>(null);
@@ -46,6 +47,7 @@ const PayIOUScreen: React.FC = () => {
   const [debugData, setDebugData] = useState<any>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchIous();
@@ -258,36 +260,101 @@ const PayIOUScreen: React.FC = () => {
     setFilteredIous(transformedIous);
   }, [transformedIous]);
 
-  // Filter IOUs based on search term
+  // Filter IOUs based on multiple search terms
   useEffect(() => {
-    if (!searchTerm.trim()) {
+    if (searchTerms.length === 0) {
       setFilteredIous(transformedIous);
       return;
     }
 
-    const searchValue = searchTerm.toLowerCase();
-    
     const filtered = transformedIous.filter(iou => {
-      return (
-        (iou.payee && iou.payee.toLowerCase().includes(searchValue)) ||
-        (iou.amount && iou.amount.toString().includes(searchValue)) ||
-        (iou.amountOwed && iou.amountOwed.toString().includes(searchValue)) ||
-        (iou.protocolId && iou.protocolId.toLowerCase().includes(searchValue)) ||
-        (iou.state && iou.state.toLowerCase().includes(searchValue))
-      );
+      // The IOU must match ALL search terms to be included
+      return searchTerms.every(term => {
+        // Check if search term has a type prefix (like "issuer:" or "payee:")
+        let searchType = '';
+        let searchValue = term.toLowerCase();
+        
+        if (term.includes(':')) {
+          const [type, value] = term.split(':');
+          searchType = type.toLowerCase();
+          searchValue = value.toLowerCase();
+        }
+        
+        // If we have a type prefix, filter by that specific field
+        if (searchType) {
+          switch (searchType) {
+            case 'issuer':
+              return iou.issuer && iou.issuer.toLowerCase().includes(searchValue);
+            case 'payee':
+              return iou.payee && iou.payee.toLowerCase().includes(searchValue);
+            case 'state':
+            case 'status':
+              return iou.state && iou.state.toLowerCase().includes(searchValue);
+            case 'id':
+              return iou.id && iou.id.toLowerCase().includes(searchValue);
+            case 'amount':
+              return iou.forAmount && iou.forAmount.toString().includes(searchValue);
+            case 'owed':
+              return iou.amountOwed && iou.amountOwed.toString().includes(searchValue);
+            default:
+              return false;
+          }
+        }
+        
+        // If no type prefix, search across all fields
+        return (
+          (iou.issuer && iou.issuer.toLowerCase().includes(searchValue)) ||
+          (iou.payee && iou.payee.toLowerCase().includes(searchValue)) ||
+          (iou.state && iou.state.toLowerCase().includes(searchValue)) ||
+          (iou.id && iou.id.toLowerCase().includes(searchValue)) ||
+          (iou.forAmount && iou.forAmount.toString().includes(searchValue)) ||
+          (iou.amountOwed && iou.amountOwed.toString().includes(searchValue))
+        );
+      });
     });
     
     setFilteredIous(filtered);
-  }, [searchTerm, transformedIous]);
+  }, [searchTerms, transformedIous]);
 
-  // Generate search suggestions
+  // Handle adding a search term
+  const handleAddSearchTerm = (term: string) => {
+    if (!term || searchTerms.includes(term)) return;
+    setSearchTerms([...searchTerms, term]);
+    setSearchTerm(''); // Clear the input after adding
+    
+    // Focus the search input after a short delay to ensure state updates have completed
+    setTimeout(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+      }
+    }, 50);
+  };
+
+  // Handle removing a search term
+  const handleRemoveSearchTerm = (termToRemove: string) => {
+    setSearchTerms(searchTerms.filter(term => term !== termToRemove));
+  };
+
+  // Clear all search terms
+  const handleClearAllSearchTerms = () => {
+    setSearchTerms([]);
+    setSearchTerm('');
+  };
+
+  // Generate search suggestions from the data
   const searchSuggestions = useMemo(() => {
     const suggestions = new Set<string>();
     
+    // Add all issuers, payees, states and protocol IDs to suggestions
     transformedIous.forEach(iou => {
-      if (iou.payee) suggestions.add(iou.payee);
-      if (iou.state) suggestions.add(iou.state);
-      if (iou.protocolId) suggestions.add(iou.protocolId.substring(0, 8));
+      if (iou.issuer) suggestions.add(`issuer:${iou.issuer}`);
+      if (iou.payee) suggestions.add(`payee:${iou.payee}`);
+      if (iou.state) suggestions.add(`state:${iou.state}`);
+      if (iou.id) suggestions.add(`id:${iou.id.substring(0, 8)}`);
+      suggestions.add(`amount:${iou.forAmount}`);
+      if (iou.amountOwed !== undefined) {
+        suggestions.add(`owed:${iou.amountOwed}`);
+      }
     });
     
     return Array.from(suggestions);
@@ -508,8 +575,9 @@ const PayIOUScreen: React.FC = () => {
           renderInput={(params) => (
             <TextField
               {...params}
+              inputRef={searchInputRef}
               variant="outlined"
-              placeholder="Search by recipient, amount, protocol ID, or state..."
+              placeholder="Search by issuer, payee, state, amount, or ID..."
               fullWidth
               InputProps={{
                 ...params.InputProps,
@@ -522,21 +590,104 @@ const PayIOUScreen: React.FC = () => {
                   </>
                 )
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchTerm) {
+                  handleAddSearchTerm(searchTerm);
+                  e.preventDefault();
+                }
+              }}
             />
           )}
+          renderOption={(props, option) => {
+            // Parse the option to display it nicely
+            let [type, value] = ['', ''];
+            if (typeof option === 'string' && option.includes(':')) {
+              [type, value] = option.split(':');
+            } else if (typeof option === 'string') {
+              value = option;
+            }
+            
+            // Extract the key prop to pass it directly to the JSX element
+            const { key, ...otherProps } = props;
+            
+            return (
+              <li key={key} {...otherProps}>
+                {type && (
+                  <Chip 
+                    label={type} 
+                    size="small" 
+                    sx={{ mr: 1, textTransform: 'capitalize' }}
+                  />
+                )}
+                {value}
+              </li>
+            );
+          }}
+          
+          // Handle option selection
+          onChange={(_, newValue) => {
+            if (newValue && typeof newValue === 'string') {
+              handleAddSearchTerm(newValue);
+            }
+          }}
         />
-        {searchTerm && (
+        
+        {/* Display active search terms as chips */}
+        {searchTerms.length > 0 && (
+          <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+            {searchTerms.map((term, index) => {
+              let label = term;
+              let color: "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" = "default";
+              
+              // Style chips differently based on search type
+              if (term.includes(':')) {
+                const type = term.split(':')[0];
+                switch (type.toLowerCase()) {
+                  case 'issuer':
+                    color = "primary";
+                    break;
+                  case 'payee':
+                    color = "secondary";
+                    break;
+                  case 'state':
+                    color = "info";
+                    break;
+                  case 'amount':
+                  case 'owed':
+                    color = "success";
+                    break;
+                  case 'id':
+                    color = "warning";
+                    break;
+                }
+              }
+              
+              return (
+                <Chip
+                  key={index}
+                  label={label}
+                  color={color}
+                  onDelete={() => handleRemoveSearchTerm(term)}
+                  size="medium"
+                />
+              );
+            })}
+            
+            <Button 
+              size="small" 
+              onClick={handleClearAllSearchTerms}
+              sx={{ ml: 1, textTransform: 'none' }}
+            >
+              Clear all
+            </Button>
+          </Box>
+        )}
+        
+        {searchTerms.length > 0 && (
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               {filteredIous.length} {filteredIous.length === 1 ? 'result' : 'results'} found
             </Typography>
-            <Button 
-              size="small" 
-              onClick={() => setSearchTerm('')}
-              sx={{ textTransform: 'none' }}
-            >
-              Clear search
-            </Button>
           </Box>
         )}
       </Paper>

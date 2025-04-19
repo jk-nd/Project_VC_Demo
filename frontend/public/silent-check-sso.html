@@ -1,11 +1,13 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
-    <title>Silent SSO check</title>
-</head>
-<body>
+    <title>Silent SSO Check</title>
     <script>
+        // This file is used by Keycloak to silently check for SSO
         parent.postMessage(location.href, location.origin);
     </script>
+</head>
+<body>
+    <!-- Silent check SSO page -->
 </body>
 </html> 

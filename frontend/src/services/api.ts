@@ -1,5 +1,5 @@
 import axios from 'axios';
-import keycloakInstance from '../auth/keycloak';
+import { IOU } from '../types/IOU';
 
 const api = axios.create({
   baseURL: '',  // Use relative paths since Vite will proxy the requests
@@ -12,9 +12,9 @@ const api = axios.create({
 // Add a request interceptor to add the auth token to requests
 api.interceptors.request.use(
   async (config) => {
-    const keycloak = keycloakInstance();
-    if (keycloak.token) {
-      config.headers.Authorization = `Bearer ${keycloak.token}`;
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -28,12 +28,9 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid, try to refresh
-      const keycloak = keycloakInstance();
-      keycloak.updateToken(70).catch(() => {
-        // If refresh fails, redirect to login
-        keycloak.login();
-      });
+      // Token expired or invalid, redirect to login
+      localStorage.removeItem('token');
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
@@ -44,13 +41,34 @@ export const createIOU = async (data: any) => {
   return api.post('/backend/npl/objects/iou/Iou/', data);
 };
 
-export const getIOUs = async () => {
-  return api.get('/backend/npl/objects/iou/Iou/', {
-    params: {
-      pageSize: 25,
-      includeCount: false
+export const getIOUs = async (): Promise<any[]> => {
+  try {
+    console.log('API getIOUs called');
+    const response = await api.get('/backend/npl/objects/iou/Iou/', {
+      params: {
+        pageSize: 25,
+        includeCount: false
+      }
+    });
+    
+    console.log('API getIOUs raw response:', response);
+    
+    // Check if we have items property (collection response) or direct array
+    let items = [];
+    if (response.data && response.data.items) {
+      items = response.data.items || [];
+    } else if (Array.isArray(response.data)) {
+      items = response.data;
+    } else {
+      console.warn('Unexpected response format from getIOUs:', response.data);
     }
-  });
+    
+    console.log('API getIOUs processed items:', items);
+    return items;
+  } catch (error) {
+    console.error('Error in API getIOUs:', error);
+    return [];
+  }
 };
 
 export const getIOU = async (id: string) => {

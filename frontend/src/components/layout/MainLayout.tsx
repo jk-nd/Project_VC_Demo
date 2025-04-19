@@ -5,7 +5,7 @@ import ListIcon from '@mui/icons-material/List';
 import AddIcon from '@mui/icons-material/Add';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../auth/KeycloakContext';
 import { Navigate } from 'react-router-dom';
 import IOUTable from '../iou/IOUTable';
 import CreateIOUForm from '../iou/CreateIOUForm';
@@ -14,16 +14,16 @@ const drawerWidth = 240;
 const collapsedDrawerWidth = 73;
 
 export default function MainLayout() {
-    const { logout, parsedToken, isAuthenticated } = useAuth();
+    const { logout, tokenParsed, isLoggedIn } = useAuth();
     const [expanded, setExpanded] = useState(false);
     const [selectedItem, setSelectedItem] = useState('dashboard');
     const [isDrawerOpen, setIsDrawerOpen] = useState(true);
 
-    if (!isAuthenticated) {
+    if (!isLoggedIn) {
         return <Navigate to="/login" replace />;
     }
 
-    if (!parsedToken) {
+    if (!tokenParsed) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
                 <Typography>Loading user information...</Typography>
@@ -38,6 +38,22 @@ export default function MainLayout() {
 
     const handleDrawerToggle = () => {
         setIsDrawerOpen(!isDrawerOpen);
+    };
+
+    // Get initials from username or email
+    const getUserInitials = () => {
+        if (tokenParsed.preferred_username) {
+            return tokenParsed.preferred_username[0]?.toUpperCase() || '?';
+        }
+        if (tokenParsed.email) {
+            return tokenParsed.email[0]?.toUpperCase() || '?';
+        }
+        return '?';
+    };
+
+    // Get display name
+    const getDisplayName = () => {
+        return tokenParsed.preferred_username || tokenParsed.email || 'Unknown User';
     };
 
     return (
@@ -58,10 +74,10 @@ export default function MainLayout() {
                     </Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Avatar sx={{ bgcolor: 'secondary.main' }}>
-                            {parsedToken.preferred_username?.[0]?.toUpperCase() || '?'}
+                            {getUserInitials()}
                         </Avatar>
                         <Typography variant="body1">
-                            {parsedToken.preferred_username || 'Unknown User'}
+                            {getDisplayName()}
                         </Typography>
                         <Button color="inherit" onClick={logout}>
                             Logout
@@ -130,13 +146,13 @@ export default function MainLayout() {
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <Paper sx={{ p: 3 }}>
                         <Typography variant="h4" component="h1" gutterBottom>
-                            Welcome, <span style={{ fontWeight: 'bold' }}>{parsedToken.preferred_username || 'User'}</span>!
+                            Welcome, <span style={{ fontWeight: 'bold' }}>{getDisplayName()}</span>!
                         </Typography>
                         <Typography variant="body1" paragraph>
-                            You are logged in as a member of {parsedToken.organization || 'the system'}.
+                            You are logged in as a member of {tokenParsed.organization || 'the system'}.
                         </Typography>
                         <Typography variant="body1" paragraph>
-                            Your email: {parsedToken.email || 'Not provided'}
+                            Your email: {tokenParsed.email || 'Not provided'}
                         </Typography>
                         <Accordion 
                             sx={{ 
@@ -166,14 +182,14 @@ export default function MainLayout() {
                                     }}
                                 >
                                     {JSON.stringify({
-                                        username: parsedToken.preferred_username,
-                                        email: parsedToken.email,
-                                        organization: parsedToken.organization || 'Not specified',
-                                        company: parsedToken.company || 'Not specified',
-                                        department: parsedToken.department || 'Not specified',
-                                        canIssue: parsedToken.Can_Issue,
-                                        roles: parsedToken.realm_access?.roles || [],
-                                        scope: parsedToken.scope,
+                                        username: tokenParsed.preferred_username,
+                                        email: tokenParsed.email,
+                                        organization: tokenParsed.organization || 'Not specified',
+                                        company: tokenParsed.company || 'Not specified',
+                                        department: tokenParsed.department || 'Not specified',
+                                        canIssue: tokenParsed.Can_Issue,
+                                        roles: tokenParsed.realm_access?.roles || [],
+                                        scope: tokenParsed.scope,
                                     }, null, 2)}
                                 </Paper>
                             </AccordionDetails>
@@ -205,11 +221,11 @@ export default function MainLayout() {
                                         wordBreak: 'break-all'
                                     }}
                                 >
-                                    {JSON.stringify(parsedToken, null, 2)}
+                                    {JSON.stringify(tokenParsed, null, 2)}
                                 </Paper>
                             </AccordionDetails>
                         </Accordion>
-                        {parsedToken.Can_Issue === "true" && (
+                        {tokenParsed.Can_Issue === "true" && (
                             <Typography variant="body1" color="primary" sx={{ mt: 2 }} paragraph>
                                 You have permission to issue IOUs.
                             </Typography>

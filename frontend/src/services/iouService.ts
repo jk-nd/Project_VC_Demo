@@ -7,21 +7,15 @@ interface CreateIOURequest {
     '@parties': {
         issuer: {
             entity: {
-                iss: string[];
-                organization: string[];
+                email: string[];
             };
-            access: {
-                preferred_email: string[];
-            };
+            access: Record<string, never>;
         };
         payee: {
             entity: {
-                iss: string[];
-                organization: string[];
+                email: string[];
             };
-            access: {
-                preferred_email: string[];
-            };
+            access: Record<string, never>;
         };
     };
 }
@@ -78,8 +72,8 @@ export const iouService = {
     },
 
     getMyIOUs: async () => {
-        const response = await apiGetIOUs();
-        return response.data.items;
+        const ious = await apiGetIOUs();
+        return ious;
     },
 
     getIOU: async (id: string) => {
@@ -98,14 +92,17 @@ export const iouService = {
     }
 };
 
-export const createIOU = async (payeeEmail: string, amount: number): Promise<IOUResponse> => {
+export const createIOU = async (payeeEmail: string, amount: number): Promise<IOU> => {
     try {
-        const response = await apiCreateIOU({
+        console.log('Creating IOU with:', { payeeEmail, amount });
+        const userEmail = localStorage.getItem('userEmail') || 'alice@tech.nd';
+        
+        const requestData = {
             forAmount: amount,
             '@parties': {
                 issuer: {
                     entity: {
-                        email: [localStorage.getItem('userEmail') || '']
+                        email: [userEmail]
                     },
                     access: {}
                 },
@@ -116,36 +113,93 @@ export const createIOU = async (payeeEmail: string, amount: number): Promise<IOU
                     access: {}
                 }
             }
-        });
-
-        if (response.status === 200) {
-            return response.data;
-        } else {
-            throw new Error('Failed to create IOU');
-        }
+        };
+        
+        console.log('IOU request data:', requestData);
+        const response = await apiCreateIOU(requestData);
+        console.log('CreateIOU API Response:', response);
+        
+        // Return a properly formatted IOU object
+        return {
+            '@id': response.data['@id'],
+            '@actions': response.data['@actions'] || {},
+            '@parties': response.data['@parties'],
+            '@state': response.data['@state'],
+            forAmount: response.data.forAmount,
+            status: mapStateToStatus(response.data['@state']),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            // Add the derived fields
+            issuerEmail: userEmail,
+            recipientEmail: payeeEmail
+        };
     } catch (error: any) {
+        console.error('CreateIOU Error:', error);
         if (error.response) {
-            switch (error.response.status) {
-                case 400:
-                    throw new Error('Invalid IOU request');
-                case 401:
-                    throw new Error('Unauthorized - Please log in again');
-                case 500:
-                    throw new Error('Server error - Please try again later');
-                default:
-                    throw new Error('Failed to create IOU');
-            }
+            console.error('Error Response:', error.response);
+            throw new Error(error.response.data?.message || 'Failed to create IOU');
         }
         throw error;
     }
 };
 
-export const fetchUserIOUs = async (): Promise<IOUResponse[]> => {
+export const fetchUserIOUs = async (): Promise<IOU[]> => {
     try {
+        console.log('fetchUserIOUs: Starting API call');
         const response = await apiGetIOUs();
-        return response.data.items;
+        console.log('fetchUserIOUs: Raw API response:', response);
+        
+        // Transform the raw data into the expected IOU format
+        if (!Array.isArray(response)) {
+            console.error('fetchUserIOUs: Expected array response but got:', response);
+            return [];
+        }
+        
+        const transformedData: IOU[] = response.map((item: any) => {
+            // Debug each item as we process it
+            console.log('Processing IOU item:', JSON.stringify(item, null, 2));
+            
+            // Extract emails for easier display
+            const issuerEmail = item['@parties']?.issuer?.entity?.email?.[0] || 'Unknown';
+            const recipientEmail = item['@parties']?.payee?.entity?.email?.[0] || 'Unknown';
+            
+            // Ensure amount is a number
+            const amount = typeof item.forAmount === 'number' 
+                ? item.forAmount 
+                : Number(item.forAmount) || 0;
+            
+            console.log(`Item ${item['@id']}: issuer=${issuerEmail}, recipient=${recipientEmail}, amount=${amount}`);
+            
+            // Use current date if missing dates
+            const now = new Date().toISOString();
+            
+            // Build the transformed object
+            const transformedItem: IOU = {
+                '@id': item['@id'],
+                '@actions': item['@actions'] || {},
+                '@parties': item['@parties'] || {
+                    issuer: { entity: { email: ['unknown'] }, access: {} },
+                    payee: { entity: { email: ['unknown'] }, access: {} }
+                },
+                '@state': item['@state'] || 'unknown',
+                forAmount: amount,
+                status: mapStateToStatus(item['@state'] || 'unknown'),
+                createdAt: now,
+                updatedAt: now,
+                issuerEmail: issuerEmail,
+                recipientEmail: recipientEmail
+            };
+            
+            console.log('Transformed item:', JSON.stringify(transformedItem, null, 2));
+            return transformedItem;
+        });
+        
+        console.log('Transformed all IOUs, count:', transformedData.length);
+        return transformedData;
     } catch (error: any) {
+        console.error('fetchUserIOUs Error:', error);
         if (error.response) {
+            console.error('Error Response:', error.response);
             switch (error.response.status) {
                 case 401:
                     throw new Error('Unauthorized - Please log in again');

@@ -1,104 +1,41 @@
 import Keycloak from 'keycloak-js';
 
 const keycloakConfig = {
-    url: '/auth',
+    url: 'http://localhost:11000',
     realm: 'projectvc-realm',
-    clientId: 'engine-client'
+    clientId: 'engine-client',
+    'public-client': true,
+    'confidential-port': 0
 };
 
-let keycloakInstance: Keycloak | null = null;
-
-export const getKeycloak = () => {
-    if (!keycloakInstance) {
-        keycloakInstance = new Keycloak(keycloakConfig);
-    }
-    return keycloakInstance;
-};
+// Create a single instance of Keycloak without initializing it
+const keycloakInstance = new Keycloak(keycloakConfig);
 
 export const getToken = () => {
-    return getKeycloak().token;
+    return keycloakInstance.token;
 };
 
 export const getParsedToken = () => {
-    return getKeycloak().tokenParsed;
-};
-
-export const keycloakLogout = () => {
-    return getKeycloak().logout();
+    return keycloakInstance.tokenParsed;
 };
 
 export const directLogin = async (username: string, password: string) => {
     try {
-        const keycloak = getKeycloak();
-        if (!keycloak.authenticated) {
-            await keycloak.init({
-                onLoad: 'check-sso',
-                checkLoginIframe: false,
-                flow: 'standard'
-            });
-        }
-
-        await keycloak.login({
-            loginHint: username
+        // Use loginHint since direct username/password login isn't supported in this way
+        const response = await keycloakInstance.login({
+            loginHint: username,
+            redirectUri: window.location.origin
         });
-
-        // If we get here, login was successful
-        return {
-            token: keycloak.token,
-            tokenParsed: keycloak.tokenParsed,
-            refreshToken: keycloak.refreshToken,
-            idToken: keycloak.idToken
-        };
+        return response;
     } catch (error) {
-        console.error('Keycloak initialization error:', error);
-        throw error;
+        console.error('Login error:', error);
+        return false;
     }
 };
 
-export interface LoginResponse {
-    access_token: string;
-    refresh_token: string;
-    expires_in: number;
-    refresh_expires_in: number;
-    token_type: string;
-}
+export const logout = () => {
+    keycloakInstance.logout();
+};
 
-export async function initKeycloak(): Promise<boolean> {
-    try {
-        const keycloak = getKeycloak();
-        if (!keycloak.authenticated) {
-            const authenticated = await keycloak.init({
-                onLoad: 'check-sso',
-                checkLoginIframe: false,
-                flow: 'standard'
-            });
-
-            if (!authenticated) {
-                await keycloak.login();
-            }
-        }
-
-        return true;
-    } catch (error) {
-        console.error('Keycloak initialization error:', error);
-        return false;
-    }
-}
-
-export async function refreshToken(): Promise<boolean> {
-    try {
-        return await getKeycloak().updateToken(5);
-    } catch (error) {
-        return false;
-    }
-}
-
-export function logout(): void {
-    keycloakLogout();
-}
-
-export function getTokenParsed(): any | undefined {
-    return getParsedToken();
-}
-
-export default getKeycloak; 
+// Export the single instance
+export default keycloakInstance; 

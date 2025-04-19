@@ -25,7 +25,6 @@ The project consists of several components:
 
 - Docker and Docker Compose
 - Node.js and npm/yarn
-- Maven (for NPL engine)
 
 ### Running the Application
 
@@ -95,16 +94,19 @@ Key permissions include:
 - `forgive`: Allows the payee to forgive the IOU
 - `getAmountOwed`: Returns the current outstanding amount
 
-## License
+## License and Requirements
 
-MIT
+This demo project is released under MIT license. 
+
+The Noumena NPL components (Engine, Read Model) used in this project require a Noumena Developer License for development and testing purposes. These components are freely available under the NPL RUNTIME DEVELOPER license, but production use would require appropriate Noumena licenses.
+
+For more information about Noumena licensing, visit: https://documentation.noumenadigital.com/licenses/
 
 ## Local Development Setup
 
 ### Prerequisites
 - Docker and Docker Compose
-- NPL CLI tools
-- Maven
+- NPL CLI tools (optional for development)
 
 ### Getting Started
 

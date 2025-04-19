@@ -5,7 +5,6 @@ import {
 } from '@mui/x-data-grid';
 import { Box, Typography, Paper, Button, Stack, Dialog, DialogTitle, DialogContent, DialogActions, TextField, CircularProgress, InputAdornment, Chip } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import CloseIcon from '@mui/icons-material/Close';
 import Autocomplete from '@mui/material/Autocomplete';
 import { IOU } from '../../types/IOU';
 import { fetchUserIOUs, payIOU } from '../../services/iouService';
@@ -52,13 +51,19 @@ export default function IOUTable() {
 
     const searchInputRef = useRef<HTMLInputElement>(null);
 
-    const loadIOUs = async () => {
-        try {
-            setLoading(true);
-            setError(null);
+        const loadIOUs = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+        
+        // Clear existing data first to avoid showing stale data
+        setIous([]);
+        setFilteredIous([]);
+        setTransformedIous([]);
+        setRawData(null);
         
         console.log('IOUTable: Loading IOUs...');
-            const data = await fetchUserIOUs();
+                const data = await fetchUserIOUs();
         
         console.log('IOUTable: Received data from service:', 
                     JSON.stringify(data, null, 2));
@@ -104,11 +109,20 @@ export default function IOUTable() {
                                     }
                                 }
                                 
+                                // Add cache-busting parameter to prevent caching
+                                const cacheBuster = `nocache=${Date.now()}`;
+                                const pathWithCacheBuster = amountOwedPath.includes('?') 
+                                    ? `${amountOwedPath}&${cacheBuster}` 
+                                    : `${amountOwedPath}?${cacheBuster}`;
+                                
                                 try {
-                                    // Try POST request first
-                                    const amountOwedResponse = await api.post(amountOwedPath, {}, {
+                                    // Try POST request first with cache-busting headers
+                                    const amountOwedResponse = await api.post(pathWithCacheBuster, {}, {
                                         headers: {
-                                            Authorization: `Bearer ${token}`
+                                            Authorization: `Bearer ${token}`,
+                                            'Cache-Control': 'no-cache, no-store, must-revalidate',
+                                            'Pragma': 'no-cache',
+                                            'Expires': '0'
                                         }
                                     });
                                     console.log(`Amount owed response for ${iou['@id']}:`, amountOwedResponse.data);
@@ -121,9 +135,13 @@ export default function IOUTable() {
                                     if (error.response && error.response.status === 405) {
                                         console.log('Received Method Not Allowed error, trying GET request instead');
                                         try {
-                                            const getResponse = await api.get(amountOwedPath, {
+                                            // Try GET request with cache-busting headers
+                                            const getResponse = await api.get(pathWithCacheBuster, {
                                                 headers: {
-                                                    Authorization: `Bearer ${token}`
+                                                    Authorization: `Bearer ${token}`,
+                                                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                                                    'Pragma': 'no-cache',
+                                                    'Expires': '0'
                                                 }
                                             });
                                             console.log(`GET Amount owed response for ${iou['@id']}:`, getResponse.data);
@@ -168,17 +186,17 @@ export default function IOUTable() {
             setFilteredIous([]);
             setTransformedIous([]);
         }
-        } catch (err) {
+            } catch (err) {
         console.error('Error loading IOUs:', err);
-            setError(err instanceof Error ? err.message : 'Failed to load IOUs');
+                setError(err instanceof Error ? err.message : 'Failed to load IOUs');
         // Clear any partial data
         setIous([]);
         setFilteredIous([]);
         setTransformedIous([]);
-        } finally {
-            setLoading(false);
-        }
-    };
+            } finally {
+                setLoading(false);
+            }
+        };
 
     useEffect(() => {
         loadIOUs();
@@ -336,8 +354,12 @@ export default function IOUTable() {
 
     // Open pay dialog
     const handlePayClick = (iou: IOU) => {
+        // Find the transformed IOU to get the actual amount owed
+        const transformedIou = transformedIous.find(item => item['@id'] === iou['@id']);
+        const amountOwed = transformedIou?.amountOwed || iou.forAmount;
+        
         setSelectedIou(iou);
-        setPaymentAmount(iou.forAmount.toString());
+        setPaymentAmount(amountOwed.toString()); // Pre-fill with max amount
         setPaymentError(null);
         setPayDialogOpen(true);
     };
@@ -362,6 +384,16 @@ export default function IOUTable() {
             return;
         }
         
+        // Find the transformed IOU to get the actual amount owed
+        const transformedIou = transformedIous.find(iou => iou['@id'] === selectedIou['@id']);
+        const amountOwed = transformedIou?.amountOwed || selectedIou.forAmount;
+        
+        // Validate payment amount doesn't exceed amount owed
+        if (amount > amountOwed) {
+            setPaymentError(`Amount may not exceed amount owed (${formatCurrency(amountOwed)})`);
+            return;
+        }
+        
         setPaymentProcessing(true);
         setPaymentError(null);
         
@@ -381,6 +413,9 @@ export default function IOUTable() {
         } catch (error: any) {
             console.error('Error processing payment:', error);
             setPaymentError(error.message || 'Failed to process payment');
+            
+            // Still refresh IOUs even if payment failed
+            await loadIOUs();
         } finally {
             setPaymentProcessing(false);
         }
@@ -690,7 +725,7 @@ export default function IOUTable() {
                             
                             // Style chips differently based on search type
                             if (term.includes(':')) {
-                                const [type, value] = term.split(':');
+                                const type = term.split(':')[0];
                                 switch (type.toLowerCase()) {
                                     case 'issuer':
                                         color = "primary";
@@ -767,18 +802,62 @@ export default function IOUTable() {
             )}
             
             <Box sx={{ height: 400, width: '100%' }}>
-            <DataGrid
-                    rows={filteredIous}
-                columns={columns}
+                <DataGrid
+                    rows={transformedIous.length > 0 ? transformedIous.filter(iou => 
+                        // Apply the same filtering logic as for filteredIous
+                        !searchTerms.length || 
+                        searchTerms.every(term => {
+                            // Check if search term has a type prefix (like "issuer:" or "state:")
+                            let searchType = '';
+                            let searchValue = term.toLowerCase();
+                            
+                            if (term.includes(':')) {
+                                const [type, value] = term.split(':');
+                                searchType = type.toLowerCase();
+                                searchValue = value.toLowerCase();
+                            }
+                            
+                            // If we have a type prefix, filter by that specific field
+                            if (searchType) {
+                                switch (searchType) {
+                                    case 'issuer':
+                                        return iou.issuerEmail && iou.issuerEmail.toLowerCase().includes(searchValue);
+                                    case 'payee':
+                                        return iou.recipientEmail && iou.recipientEmail.toLowerCase().includes(searchValue);
+                                    case 'state':
+                                        return iou['@state'] && iou['@state'].toLowerCase().includes(searchValue);
+                                    case 'id':
+                                        return iou['@id'] && iou['@id'].toLowerCase().includes(searchValue);
+                                    case 'amount':
+                                        return iou.forAmount && iou.forAmount.toString().includes(searchValue);
+                                    case 'owed':
+                                        return iou.amountOwed && iou.amountOwed.toString().includes(searchValue);
+                                    default:
+                                        return false;
+                                }
+                            }
+                            
+                            // If no type prefix, search across all fields
+                            return (
+                                (iou.issuerEmail && iou.issuerEmail.toLowerCase().includes(searchValue)) ||
+                                (iou.recipientEmail && iou.recipientEmail.toLowerCase().includes(searchValue)) ||
+                                (iou['@state'] && iou['@state'].toLowerCase().includes(searchValue)) ||
+                                (iou['@id'] && iou['@id'].toLowerCase().includes(searchValue)) ||
+                                (iou.forAmount && iou.forAmount.toString().includes(searchValue)) ||
+                                (iou.amountOwed && iou.amountOwed.toString().includes(searchValue))
+                            );
+                        })
+                    ) : filteredIous}
+                    columns={columns}
                     getRowId={(row) => row['@id']}
-                loading={loading}
+                    loading={loading}
                     initialState={{
                         pagination: {
                             paginationModel: { pageSize: 5, page: 0 },
                         },
                     }}
-                pageSizeOptions={[5, 10, 25]}
-                disableRowSelectionOnClick
+                    pageSizeOptions={[5, 10, 25]}
+                    disableRowSelectionOnClick
                 />
             </Box>
 
@@ -791,6 +870,17 @@ export default function IOUTable() {
                             <Typography paragraph>
                                 You owe {formatCurrency(selectedIou.forAmount)} to {selectedIou.recipientEmail}.
                             </Typography>
+                            
+                            {/* Show current amount owed */}
+                            {transformedIous.length > 0 && (
+                                <Typography paragraph color="primary.main" fontWeight="bold">
+                                    Current amount owed: {formatCurrency(
+                                        transformedIous.find(iou => iou['@id'] === selectedIou['@id'])?.amountOwed || 
+                                        selectedIou.forAmount
+                                    )}
+                                </Typography>
+                            )}
+                            
                             <TextField
                                 label="Payment Amount"
                                 type="text"

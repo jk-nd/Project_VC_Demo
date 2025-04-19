@@ -96,7 +96,7 @@ Key permissions include:
 
 ## License and Requirements
 
-This demo project is released under MIT license. 
+This demo project is released under the Apache License 2.0. 
 
 The Noumena NPL components (Engine, Read Model) used in this project require a Noumena Developer License for development and testing purposes. These components are freely available under the NPL RUNTIME DEVELOPER license, but production use would require appropriate Noumena licenses.
 

@@ -2,9 +2,10 @@ import axios from 'axios';
 import keycloakInstance from '../auth/keycloak';
 
 const api = axios.create({
-  baseURL: '/api/npl/objects/iou',
+  baseURL: '',  // Use relative paths since Vite will proxy the requests
   headers: {
-    'accept': 'application/json'
+    'accept': 'application/json',
+    'Content-Type': 'application/json'
   }
 });
 
@@ -38,12 +39,13 @@ api.interceptors.response.use(
   }
 );
 
+// NPL Protocol API methods
 export const createIOU = async (data: any) => {
-  return api.post('/Iou', data);
+  return api.post('/backend/npl/objects/iou/Iou/', data);
 };
 
 export const getIOUs = async () => {
-  return api.get('/Iou', {
+  return api.get('/backend/npl/objects/iou/Iou/', {
     params: {
       pageSize: 25,
       includeCount: false
@@ -52,17 +54,34 @@ export const getIOUs = async () => {
 };
 
 export const getIOU = async (id: string) => {
-  return api.get(`/Iou/${id}`);
+  return api.get(`/backend/npl/objects/iou/Iou/${id}/`);
 };
 
 export const payIOU = async (iouId: string, data: { amount: number }) => {
-  const response = await api.post(`/Iou/${iouId}/pay`, data);
+  const response = await api.post(`/backend/npl/objects/iou/Iou/${iouId}/pay`, data);
   return response.data;
 };
 
 export const forgiveIOU = async (iouId: string) => {
-  const response = await api.post(`/Iou/${iouId}/forgive`);
+  const response = await api.post(`/backend/npl/objects/iou/Iou/${iouId}/forgive`);
   return response.data;
+};
+
+// Engine API methods
+export const getProtocols = async () => {
+  return api.get('/backend/api/engine/protocols/');
+};
+
+export const getStreams = async () => {
+  return api.get('/backend/api/streams');
+};
+
+export const getArchivedStates = async () => {
+  return api.get('/backend/api/streams/current-archived-states');
+};
+
+export const getCommands = async () => {
+  return api.get('/backend/api/streams/current-commands');
 };
 
 export default api; 

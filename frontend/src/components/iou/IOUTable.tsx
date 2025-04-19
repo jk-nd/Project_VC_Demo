@@ -67,7 +67,19 @@ export default function IOUTable() {
                 setLoading(true);
                 setError(null);
                 const data = await fetchUserIOUs();
-                setIous(data);
+                // Transform the data to match what DataGrid expects
+                const transformedData = data.map(iou => ({
+                    id: iou['@id'],
+                    issuer: iou['@parties'].issuer.entity.email[0],
+                    recipient: iou['@parties'].payee.entity.email[0],
+                    amount: iou.forAmount,
+                    currency: 'USD',
+                    description: `IOU from ${iou['@parties'].issuer.entity.email[0]} to ${iou['@parties'].payee.entity.email[0]}`,
+                    status: mapStateToStatus(iou['@state']),
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                }));
+                setIous(transformedData);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load IOUs');
             } finally {
@@ -98,4 +110,20 @@ export default function IOUTable() {
             />
         </Box>
     );
-} 
+}
+
+// Helper function to map backend states to our IOU status types
+const mapStateToStatus = (state: string): IOU['status'] => {
+    switch (state.toLowerCase()) {
+        case 'unpaid':
+            return 'PENDING';
+        case 'paid':
+            return 'PAID';
+        case 'accepted':
+            return 'ACCEPTED';
+        case 'rejected':
+            return 'REJECTED';
+        default:
+            return 'PENDING';
+    }
+}; 

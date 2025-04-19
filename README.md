@@ -1,6 +1,87 @@
 # Project VC Demo
 
-A vibe coding workflow implementation using NPL (Noumena Protocol Language) for backend workflow and business process management.
+This project demonstrates a full-stack application with a backend in NPL and a frontend using Vite.
+
+## Architecture
+
+The project consists of several components:
+
+- **Frontend**: A React application built with Vite
+- **Backend**: An NPL engine service
+- **Authentication**: Keycloak for identity management
+- **Proxy**: Nginx for routing requests
+
+## Development Setup
+
+### Prerequisites
+
+- Docker and Docker Compose
+- Node.js and npm/yarn
+- Maven (for NPL engine)
+
+### Running the Application
+
+1. Start the backend services:
+```bash
+docker compose up -d
+```
+
+2. Start the frontend development server:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The application will be available at:
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:12000
+- Keycloak: http://localhost:80/auth
+
+## API Configuration
+
+The frontend uses Axios for API requests, configured in `frontend/src/services/api.ts`. All API requests are prefixed with `/backend` and are proxied through Vite to the NPL engine.
+
+### Vite Proxy Configuration
+
+The Vite development server is configured to proxy requests to the backend services:
+
+```typescript
+// vite.config.ts
+export default defineConfig({
+  server: {
+    proxy: {
+      '/backend': {
+        target: 'http://localhost:12000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/backend/, '')
+      },
+      '/auth': {
+        target: 'http://localhost:80',
+        changeOrigin: true,
+      }
+    }
+  }
+})
+```
+
+Important notes about the proxy configuration:
+1. The `/backend` prefix is used to distinguish API requests from other routes
+2. The `rewrite` function removes the `/backend` prefix before forwarding to the engine
+3. This setup avoids CORS issues by making all requests appear to come from the same origin
+4. The API methods in `api.ts` must include the `/backend` prefix in their paths
+
+## Authentication
+
+The application uses Keycloak for authentication. The configuration is in `frontend/src/auth/keycloak.ts`.
+
+## Nginx Configuration
+
+Nginx is used to route requests between services. The configuration is in `nginx.conf`.
+
+## License
+
+MIT
 
 ## Local Development Setup
 

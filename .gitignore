@@ -12,3 +12,6 @@
 # OS specific files
 .DS_Store
 Thumbs.db backup-files/
+
+# Temporary or test directories
+temp-npl-integrations/

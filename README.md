@@ -188,3 +188,17 @@ The NPL Engine exposes REST APIs for:
 - Workflow state management
 
 Detailed API documentation is available at http://localhost:12000/swagger-ui/ once the services are running.
+
+## Nginx Configuration
+
+The project uses Nginx as a reverse proxy to route traffic between different services. The Nginx configuration is defined in `nginx.conf`:
+
+### Key Features
+- Routes frontend requests to the Vite development server
+- Proxies API requests to the NPL engine at `/npl/`
+- Proxies authentication requests to Keycloak at `/auth/`
+- Handles CORS headers for all responses
+- Configures proper forwarding of headers for proxied requests
+
+### Running with Docker
+The Nginx proxy is configured in `docker-compose.yml` and runs as a container. It maps port 80 from the host to the container and mounts the `nginx.conf` file for configuration.

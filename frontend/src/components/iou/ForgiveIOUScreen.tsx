@@ -1,36 +1,13 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Box, Button, Typography, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress, Paper, TextField, InputAdornment } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import api from '../../services/api';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+//import { formatCurrency, formatDate } from '../../utils/formatters';
 import { useAuth } from '../../auth/KeycloakContext';
 import SearchIcon from '@mui/icons-material/Search';
 import Autocomplete from '@mui/material/Autocomplete';
-
-// Define the structure of an IOU as it comes from the API
-interface IOUResponse {
-  '@id': string;
-  '@actions': string[] | { [key: string]: string };
-  '@parties': {
-    issuer: {
-      entity: { 
-        email: string[];
-        name?: string;
-      };
-      access: any;
-    };
-    payee: {
-      entity: { 
-        email: string[];
-        name?: string;
-      };
-      access: any;
-    };
-  };
-  forAmount: number;
-  '@state'?: string;
-  '@created'?: string;
-}
+import { IOU } from '../../types/IOU';
+import { formatCurrency } from '../../utils/formatters';
 
 const ForgiveIOUScreen: React.FC = () => {
   const { tokenParsed, getToken } = useAuth();
@@ -40,7 +17,7 @@ const ForgiveIOUScreen: React.FC = () => {
   const [transformedIous, setTransformedIous] = useState<any[]>([]);
   const [filteredIous, setFilteredIous] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [selectedIou, setSelectedIou] = useState<IOUResponse | null>(null);
+  const [selectedIou, setSelectedIou] = useState<IOU | null>(null);
   const [openConfirmDialog, setOpenConfirmDialog] = useState<boolean>(false);
   const [forgivingIou, setForgivingIou] = useState<boolean>(false);
   const [forgiveError, setForgiveError] = useState<string | null>(null);
@@ -89,15 +66,20 @@ const ForgiveIOUScreen: React.FC = () => {
     return Array.from(suggestions);
   }, [transformedIous]);
 
-  const fetchIOUs = async () => {
+  const fetchIOUs = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
-      console.log('Fetching IOUs where user is the payee...');
+      if (!tokenParsed || !tokenParsed.email) {
+        throw new Error('User email not available in token');
+      }
+      const userEmail = tokenParsed.email;
+      console.log("User email:", userEmail);
+      
+      // Get a fresh token
       const token = await getToken();
       
-      // Use the api service instead of fetch and correct endpoint
-      const response = await api.get('/backend/npl/objects/iou/Iou/', {
+      // Update to use the correct endpoint pattern with trailing slash, auth token, and pagination
+      const response = await api.get<any>('/npl/objects/iou/Iou/', {
         headers: {
           Authorization: `Bearer ${token}`
         },
@@ -107,63 +89,52 @@ const ForgiveIOUScreen: React.FC = () => {
         }
       });
       
-      console.log('API response:', response.data);
+      // Extract IOU list from response, ensuring it's an array
+      const responseData = response.data;
+      const iouList = Array.isArray(responseData) ? responseData : 
+                     (responseData && responseData.items ? responseData.items : []);
       
-      // Process the response data
-      let iouList: IOUResponse[] = [];
+      console.log("Total IOUs:", iouList.length);
+      console.log("Response structure:", JSON.stringify(responseData).substring(0, 200));
       
-      if (Array.isArray(response.data)) {
-        iouList = response.data;
-      } else if (response.data && typeof response.data === 'object') {
-        if (Array.isArray(response.data.items)) {
-          iouList = response.data.items;
-        } else if (Array.isArray(response.data.content)) {
-          iouList = response.data.content;
-        }
+      // Log the first IOU to inspect its structure and available actions
+      if (iouList && iouList.length > 0) {
+        console.log("First IOU structure:", iouList[0]);
+        console.log("First IOU actions:", iouList[0]['@actions']);
+        console.log("First IOU state:", iouList[0]['@state']);
       }
       
-      // Filter to only get IOUs where the current user is the payee (recipient)
-      const userEmail = tokenParsed?.email || '';
-      console.log('Current user email:', userEmail);
+      const filteredIOUs = iouList.filter((iou: IOU) => 
+        (iou['@parties']?.payee?.entity?.email?.includes(userEmail)) && 
+        iou['@state'] !== 'paid' && 
+        iou['@state'] !== 'forgiven' &&
+        (Array.isArray(iou['@actions']) ? 
+          iou['@actions'].includes('forgive') : 
+          iou['@actions'] && 'forgive' in iou['@actions'])
+      );
+      console.log("Filtered IOUs (user is payee with forgive action):", filteredIOUs.length);
       
-      const filteredIouList = iouList.filter((iou: IOUResponse) => {
-        const isPaidOrForgiven = iou['@state'] === 'paid' || iou['@state'] === 'forgiven';
-        const isPayee = iou['@parties']?.payee?.entity?.email?.includes(userEmail);
-        
-        // Consider only unpaid IOUs where current user is the payee
-        return isPayee && !isPaidOrForgiven;
-      });
+      const transformedIOUs = filteredIOUs.map((iou: IOU) => ({
+        id: iou['@id'],
+        issuerEmail: iou['@parties']?.issuer?.entity?.email?.[0] || 'Unknown',
+        issuerName: iou['@parties']?.issuer?.entity?.email?.[0] || 'Unknown',
+        amount: iou.forAmount || 0,
+        date: iou.createdAt ? new Date(iou.createdAt).toLocaleDateString() : 'Unknown',
+        status: iou['@state'] || 'Unknown',
+        originalIou: iou
+      }));
       
-      console.log('Filtered IOUs where user is payee:', filteredIouList);
-      
-      // Transform IOUs for DataGrid
-      const mappedIous = filteredIouList.map((iou: IOUResponse) => {
-        return {
-          id: iou['@id'],
-          amount: iou.forAmount,
-          issuerName: iou['@parties']?.issuer?.entity?.name || 'Unknown',
-          issuerEmail: iou['@parties']?.issuer?.entity?.email?.[0] || 'Unknown',
-          date: formatDate(iou['@created']),
-          status: iou['@state'],
-          originalIou: iou
-        };
-      });
-      
-      console.log('Transformed IOUs for DataGrid:', mappedIous);
-      setTransformedIous(mappedIous);
-      
-      if (filteredIouList.length === 0) {
-        console.log('No IOUs found where user is the payee');
-      }
+      setTransformedIous(transformedIOUs);
+      setFilteredIous(transformedIOUs);
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching IOUs:', error);
-      setError(error instanceof Error ? error.message : 'An unexpected error occurred');
-    } finally {
+      setError('Failed to fetch IOUs');
       setLoading(false);
     }
-  };
+  }, [tokenParsed, getToken]);
 
-  const handleForgiveClick = (iou: IOUResponse) => {
+  const handleForgiveClick = (iou: IOU) => {
     setSelectedIou(iou);
     setOpenConfirmDialog(true);
     setForgiveError(null);
@@ -183,14 +154,12 @@ const ForgiveIOUScreen: React.FC = () => {
       const token = await getToken();
       const iouId = selectedIou['@id'];
       
-      // Use the action URL if available
       let forgiveUrl;
       if (typeof selectedIou['@actions'] === 'object' && 'forgive' in selectedIou['@actions']) {
         const actionUrl = (selectedIou['@actions'] as { [key: string]: string })['forgive'];
         console.log('Using forgive action URL from IOU:', actionUrl);
         
         if (actionUrl) {
-          // If it's a full URL, extract just the path
           if (actionUrl.startsWith('http')) {
             try {
               const urlObj = new URL(actionUrl);
@@ -200,13 +169,11 @@ const ForgiveIOUScreen: React.FC = () => {
               forgiveUrl = actionUrl;
             }
           } else {
-            // It's already a path
             forgiveUrl = actionUrl;
           }
         }
       }
       
-      // Default forgive URL as fallback
       if (!forgiveUrl) {
         forgiveUrl = `/npl/objects/iou/Iou/${iouId}/forgive`;
         console.log('Using default forgive URL:', forgiveUrl);
@@ -214,7 +181,6 @@ const ForgiveIOUScreen: React.FC = () => {
       
       console.log('Sending forgive request to:', forgiveUrl);
       try {
-        // First try a POST request
         await api.post(forgiveUrl, {}, {
           headers: {
             Authorization: `Bearer ${token}`
@@ -222,7 +188,6 @@ const ForgiveIOUScreen: React.FC = () => {
         });
         console.log('Forgive request successful');
       } catch (error: any) {
-        // If we get a 405 Method Not Allowed, try a GET request
         if (error.response && error.response.status === 405) {
           console.log('Received Method Not Allowed error, trying GET request instead');
           await api.get(forgiveUrl, {
@@ -232,13 +197,11 @@ const ForgiveIOUScreen: React.FC = () => {
           });
           console.log('Forgive GET request successful');
         } else {
-          // Other error, rethrow it
           throw error;
         }
       }
       
       setOpenConfirmDialog(false);
-      // Refresh the list of IOUs
       fetchIOUs();
     } catch (err: any) {
       console.error('Error forgiving IOU:', err);
@@ -250,9 +213,12 @@ const ForgiveIOUScreen: React.FC = () => {
 
   const transformedColumns: GridColDef[] = [
     { 
-      field: 'issuerName', 
+      field: 'issuerEmail', 
       headerName: 'From', 
-      width: 200 
+      width: 200,
+      valueGetter: (params: any) => {
+        return params.row?.issuerEmail || 'Unknown';
+      }
     },
     { 
       field: 'amount',
@@ -269,11 +235,17 @@ const ForgiveIOUScreen: React.FC = () => {
       field: 'date',
       headerName: 'Created Date',
       width: 200,
+      valueGetter: (params: any) => {
+        return params.row?.date || 'Unknown';
+      }
     },
     {
       field: 'status',
       headerName: 'Status',
-      width: 120
+      width: 120,
+      valueGetter: (params: any) => {
+        return params.row?.status ? params.row.status.toUpperCase() : 'UNKNOWN';
+      }
     },
     {
       field: 'actions',
@@ -320,7 +292,6 @@ const ForgiveIOUScreen: React.FC = () => {
         </Button>
       </Box>
 
-      {/* Search Bar */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Typography variant="subtitle1" gutterBottom>
           Search IOUs
@@ -367,7 +338,6 @@ const ForgiveIOUScreen: React.FC = () => {
       </Paper>
 
       <Box sx={{ flexGrow: 1 }}>
-        {/* Debug info - only shown when debug is enabled */}
         {showDebug && transformedIous.length > 0 && (
           <Box sx={{ mb: 2, p: 2, bgcolor: 'lightyellow', borderRadius: 1 }}>
             <Typography variant="subtitle2">First row debug:</Typography>
@@ -392,7 +362,6 @@ const ForgiveIOUScreen: React.FC = () => {
         />
       </Box>
 
-      {/* Forgive Confirmation Dialog */}
       <Dialog open={openConfirmDialog} onClose={handleCloseDialog}>
         <DialogTitle>Confirm Forgiveness</DialogTitle>
         <DialogContent>

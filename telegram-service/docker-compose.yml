@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  # Telegram Bot Service
+  telegram-bot:
+    build:
+      context: ./bot-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./bot-service/.env
+    networks:
+      - npl-network
+
+  # Admin UI
+  admin-ui:
+    build:
+      context: ./admin-ui
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./admin-ui/.env
+    networks:
+      - npl-network
+
+networks:
+  npl-network:
+    external: true 

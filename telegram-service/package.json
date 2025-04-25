@@ -1,0 +1,27 @@
+{
+  "name": "npl-telegram-integration",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "bot-service",
+    "admin-ui"
+  ],
+  "scripts": {
+    "dev:bot": "npm run dev --workspace=bot-service",
+    "dev:admin": "npm run dev --workspace=admin-ui",
+    "dev": "concurrently \"npm run dev:bot\" \"npm run dev:admin\"",
+    "build:bot": "npm run build --workspace=bot-service",
+    "build:admin": "npm run build --workspace=admin-ui",
+    "build": "npm run build:bot && npm run build:admin",
+    "start:bot": "npm run start --workspace=bot-service",
+    "start:admin": "npm run start --workspace=admin-ui",
+    "start": "concurrently \"npm run start:bot\" \"npm run start:admin\"",
+    "lint": "concurrently \"npm run lint --workspace=bot-service\" \"npm run lint --workspace=admin-ui\"",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+} 
